@@ -99,21 +99,21 @@ const uint8_t ANALOG_OUT_MIN = 0;                 // Arduino constant
 const uint8_t ANALOG_OUT_MAX = TIMER1_COUNT_TO;   // PWM control
 #endif
 
-const uint8_t FAN_OUT_LOW_THRESHOLD = (long) ANALOG_OUT_MAX * FAN_LOW_THRESHOLD_VOLTAGE /  FAN_MAX_VOLTAGE;
+const uint8_t FAN_OUT_LOW_THRESHOLD = (uint32_t) ANALOG_OUT_MAX * FAN_LOW_THRESHOLD_VOLTAGE /  FAN_MAX_VOLTAGE;
 const uint8_t FAN_OUT_FAN_OFF = ANALOG_OUT_MIN;
 
 // Continuous mode:
-const uint8_t FAN_OUT_CONTINUOUS_LOW_DUTY_VALUE = (long) ANALOG_OUT_MAX * FAN_CONTINUOUS_LOW_VOLTAGE /  FAN_MAX_VOLTAGE;
-const uint8_t FAN_OUT_CONTINUOUS_MEDIUM_DUTY_VALUE = (long) ANALOG_OUT_MAX * FAN_CONTINUOUS_MEDIUM_VOLTAGE /  FAN_MAX_VOLTAGE;
-const uint8_t FAN_OUT_CONTINUOUS_HIGH_DUTY_VALUE = (long) ANALOG_OUT_MAX * FAN_CONTINUOUS_HIGH_VOLTAGE /  FAN_MAX_VOLTAGE;
+const uint8_t FAN_OUT_CONTINUOUS_LOW_DUTY_VALUE = (uint32_t) ANALOG_OUT_MAX * FAN_CONTINUOUS_LOW_VOLTAGE /  FAN_MAX_VOLTAGE;
+const uint8_t FAN_OUT_CONTINUOUS_MEDIUM_DUTY_VALUE = (uint32_t) ANALOG_OUT_MAX * FAN_CONTINUOUS_MEDIUM_VOLTAGE /  FAN_MAX_VOLTAGE;
+const uint8_t FAN_OUT_CONTINUOUS_HIGH_DUTY_VALUE = (uint32_t) ANALOG_OUT_MAX * FAN_CONTINUOUS_HIGH_VOLTAGE /  FAN_MAX_VOLTAGE;
 
-const uint8_t FAN_OUT_INTERVAL_FAN_ON_DUTY_VALUE = (long) ANALOG_OUT_MAX * FAN_INTERVAL_FAN_ON_VOLTAGE /  FAN_MAX_VOLTAGE;
+const uint8_t FAN_OUT_INTERVAL_FAN_ON_DUTY_VALUE = (uint32_t) ANALOG_OUT_MAX * FAN_INTERVAL_FAN_ON_VOLTAGE /  FAN_MAX_VOLTAGE;
 const uint32_t INTERVAL_FAN_ON_DURATION_MS = (uint32_t) INTERVAL_FAN_ON_DURATION * 1000; // [ms]
 uint32_t intervalPauseDuration;
 
 // Fan soft start and soft stop:
-const uint16_t FAN_START_INCREMENT = ((long) (ANALOG_OUT_MAX - FAN_OUT_LOW_THRESHOLD)) * CONTROL_CYCLE_DURATION_MS / FAN_START_DURATION_MS;
-const uint16_t FAN_STOP_DECREMENT = ((long) (ANALOG_OUT_MAX - FAN_OUT_LOW_THRESHOLD)) * CONTROL_CYCLE_DURATION_MS / FAN_STOP_DURATION_MS;
+const uint16_t FAN_START_INCREMENT = (uint32_t) (ANALOG_OUT_MAX - FAN_OUT_LOW_THRESHOLD) * CONTROL_CYCLE_DURATION_MS / FAN_START_DURATION_MS;
+const uint16_t FAN_STOP_DECREMENT = (uint32_t) (ANALOG_OUT_MAX - FAN_OUT_LOW_THRESHOLD) * CONTROL_CYCLE_DURATION_MS / FAN_STOP_DURATION_MS;
 
 uint8_t fanTargetDutyValue = FAN_OUT_FAN_OFF; // potentiometer value read from input pin
 uint8_t fanActualDutyValue = FAN_OUT_FAN_OFF; // value actually set on output pin
@@ -216,7 +216,7 @@ void handleInputChange(FanMode newMode, FanIntensity newIntensity, uint32_t now)
       prepareFanDutyChange(FAN_OUT_FAN_OFF, now);
 
   } else if (newMode == MODE_CONTINUOUS) {
-      uint8_t newTargetDutyValue = calcFanDutyValue(newIntensity);
+      uint8_t newTargetDutyValue = mapToFanDutyValue(newIntensity);
       #ifdef VERBOSE
         Serial.print("Mode CONTINUOUS, Duty Value: ");
         Serial.println(newTargetDutyValue);
@@ -224,7 +224,7 @@ void handleInputChange(FanMode newMode, FanIntensity newIntensity, uint32_t now)
       prepareFanDutyChange(newTargetDutyValue, now);
 
   } else if (newMode == MODE_INTERVAL) {
-    intervalPauseDuration = calcIntervalPauseDuration(newIntensity);
+    intervalPauseDuration = mapToIntervalPauseDuration(newIntensity);
     
     if (fanState == FAN_OFF) {
         intervalPhase = PHASE_PAUSE;
@@ -374,7 +374,7 @@ FanIntensity readFanIntensityFromInputPins() {
 
 
 // Applicable only in mode CONTINUOUS
-uint8_t calcFanDutyValue(FanIntensity intensity) {
+uint8_t mapToFanDutyValue(FanIntensity intensity) {
   switch(intensity) {
     case INTENSITY_HIGH: 
       return FAN_OUT_CONTINUOUS_HIGH_DUTY_VALUE;
@@ -387,7 +387,7 @@ uint8_t calcFanDutyValue(FanIntensity intensity) {
 
 // Applicable only in mode INTERVAL
 // Returns [ms]
-uint32_t calcIntervalPauseDuration(FanIntensity intensity) {
+uint32_t mapToIntervalPauseDuration(FanIntensity intensity) {
   switch(intensity) {
     case INTENSITY_HIGH: 
       return (uint32_t) INTERVAL_PAUSE_SHORT_DURATION * 1000; // [ms]

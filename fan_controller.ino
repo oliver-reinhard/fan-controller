@@ -24,6 +24,8 @@ const uint16_t INTERVAL_FAN_ON_DURATION = 10; // [s]
 const uint16_t INTERVAL_PAUSE_SHORT_DURATION = 10; // [s]
 const uint16_t INTERVAL_PAUSE_MEDIUM_DURATION = 20; // [s]
 const uint16_t INTERVAL_PAUSE_LONG_DURATION = 30; // [s]
+const uint16_t INTERVAL_PAUSE_BLIP_OFF_DURATION_MS = 5000;  // [ms] LED blips during pause: HIGH state
+const uint16_t INTERVAL_PAUSE_BLIP_ON_DURATION_MS = 200;    // [ms] LED LOW state
 
 // Fan soft start and stop:
 const uint16_t FAN_START_DURATION_MS = 4000;  // [ms] duration from full stop to full throttle
@@ -39,12 +41,15 @@ const bool BLINK_LED_DURING_SPEED_TRANSITION = false;
 
 #ifdef _ATMEGA328_
   #define VERBOSE
-  const uint8_t MODE_SWITCH_IN_PIN = 2;           // PD2 - digital: LOW --> CONTINOUS, HIGH   --> INTERVAL
-  const uint8_t INTENSITY_SWITCH_IN_PIN_1 = 5;    // PD5 - digital: PD5==LOW && PD6==HIGH     --> LOW INTENSITY
-  const uint8_t INTENSITY_SWITCH_IN_PIN_2 = 6;    // PD6 - digital: PD5==HIGH && PD6==LOW     --> HIGH INTENSITY
-                                                  //                PD5==LOW && PD6==HIGH=LOW --> MEDIUM INTENSITY
-  const uint8_t FAN_OUT_PIN = 3;                  // PD3 - PWM @ native frequency
-  const uint8_t STATUS_LED_OUT_PIN = 4;           // PD4 - digital out; is on when fan is of, blinks during transitioning
+  const uint8_t MODE_SWITCH_IN_PIN_1 = 8;         // PB0 - digital: PB0==LOW  && PB1==HIGH  --> INTERVAL
+  const uint8_t MODE_SWITCH_IN_PIN_2 = 9;         // PB1 - digital: PB0==HIGH && PB1==LOW   --> CONTINUOUS
+                                                  //                PB0==HIGH && PB1==HIGH  --> OFF
+  const uint8_t INTENSITY_SWITCH_IN_PIN_1 = 6;    // PD6 - digital: PD6==LOW  && PD7==HIGH  --> LOW INTENSITY
+  const uint8_t INTENSITY_SWITCH_IN_PIN_2 = 7;    // PD7 - digital: PD6==HIGH && PD7==LOW   --> HIGH INTENSITY
+                                                  //                PD6==HIGH && PD7==HIGH  --> MEDIUM INTENSITY
+  const uint8_t FAN_PWM_OUT_PIN = 3;              // PD3 - PWM signal @ native frequency (490 Hz)
+  const uint8_t FAN_POWER_OUT_PIN = 4;            // PD4 - fan power: MOSFET on/off
+  const uint8_t STATUS_LED_OUT_PIN = 5;           // PD5 - digital out; is on when fan is of, blinks during transitioning
 #endif 
 
 #ifdef _ATTINY85_
@@ -52,34 +57,35 @@ const bool BLINK_LED_DURING_SPEED_TRANSITION = false;
   const uint8_t INTENSITY_SWITCH_IN_PIN_1 = PB3;  // digital: PB3==LOW && PB4==HIGH --> LOW INTENSITY, BOTH=LOW --> MEDIUM
   const uint8_t INTENSITY_SWITCH_IN_PIN_2 = PB4;  // digital: PB3==HIGH && PB4==LOW --> HIGH INTENSITY
   
-  const uint8_t FAN_OUT_PIN = PB1;                // PWM @ 25 kHz
+  const uint8_t FAN_POWER_OUT_PIN = PB5;          // Fan power: MOSFET on/off (some fans don't stop at PWM duty cycle = 0%)
+  const uint8_t FAN_PWM_OUT_PIN = PB1;            // PWM signal @ 25 kHz
   const uint8_t STATUS_LED_OUT_PIN = PB0;         // digital out; blinks shortly in long intervals when fan is in interval mode
 #endif 
 
 
 //
-// CONTROLLER STATES
+// INPUTs
 //
 enum FanMode {MODE_OFF, MODE_CONTINUOUS, MODE_INTERVAL};
-FanMode fanMode = MODE_OFF;                       // actual fan mode
+FanMode fanMode = MODE_OFF;
 
 enum FanIntensity {INTENSITY_LOW, INTENSITY_MEDIUM, INTENSITY_HIGH};
-FanIntensity fanIntensity = INTENSITY_LOW;        // actual fan intensity
+FanIntensity fanIntensity = INTENSITY_LOW;
 
-// Interval mode:
-enum IntervalPhase {PHASE_FAN_ON, PHASE_PAUSE};
-IntervalPhase intervalPhase = PHASE_FAN_ON;
+
+//
+// CONTROLLER STATES
+//
+enum FanState {FAN_OFF, FAN_SPEEDING_UP, FAN_STEADY, FAN_SLOWING_DOWN, FAN_PAUSING};
+FanState fanState = FAN_OFF;                      // current fan state
+
+enum Event {EVENT_NONE, MODE_CHANGED, INTENSITY_CHANGED, TARGET_SPEED_REACHED, INTERVAL_PHASE_ENDED};
+Event pendingEvent = EVENT_NONE;
 
 uint32_t intervalPhaseBeginTime = 0; // [ms]
 
-// Fan control:
-enum FanState {FAN_OFF, FAN_SPEEDING_UP, FAN_STEADY, FAN_SLOWING_DOWN};
-
-FanState fanState = FAN_OFF;
-
-// Control cycle: output values are set only once per cycle
-const uint32_t CONTROL_CYCLE_DURATION_MS = 200; // [ms]
-uint32_t controlCycleBeginTime = 0; // [ms]
+// Control cycle: PWM parameters are set only once per cycle
+const uint32_t SPEED_TRANSITION_CYCLE_DURATION_MS = 200; // [ms]
 
 
 //
@@ -112,32 +118,31 @@ const uint32_t INTERVAL_FAN_ON_DURATION_MS = (uint32_t) INTERVAL_FAN_ON_DURATION
 uint32_t intervalPauseDuration;
 
 // Fan soft start and soft stop:
-const uint16_t FAN_START_INCREMENT = (uint32_t) (ANALOG_OUT_MAX - FAN_OUT_LOW_THRESHOLD) * CONTROL_CYCLE_DURATION_MS / FAN_START_DURATION_MS;
-const uint16_t FAN_STOP_DECREMENT = (uint32_t) (ANALOG_OUT_MAX - FAN_OUT_LOW_THRESHOLD) * CONTROL_CYCLE_DURATION_MS / FAN_STOP_DURATION_MS;
+const uint16_t FAN_START_INCREMENT = (uint32_t) (ANALOG_OUT_MAX - FAN_OUT_LOW_THRESHOLD) * SPEED_TRANSITION_CYCLE_DURATION_MS / FAN_START_DURATION_MS;
+const uint16_t FAN_STOP_DECREMENT = (uint32_t) (ANALOG_OUT_MAX - FAN_OUT_LOW_THRESHOLD) * SPEED_TRANSITION_CYCLE_DURATION_MS / FAN_STOP_DURATION_MS;
 
-uint8_t fanTargetDutyValue = FAN_OUT_FAN_OFF; // potentiometer value read from input pin
+uint8_t fanTargetDutyValue = FAN_OUT_FAN_OFF; // value derived from input-pin values
 uint8_t fanActualDutyValue = FAN_OUT_FAN_OFF; // value actually set on output pin
 
-uint32_t transitionBeginTime = 0;
+uint32_t lastPauseBlipTime = 0;
 uint8_t transitioningDutyValue = ANALOG_OUT_MIN; // incremented in discrete steps until fan is at its target speed or its low threshold
 
 //
 // DIGITAL OUT
 //
 uint8_t statusLEDState = LOW;
-uint16_t controlCycleCount = 0;
 
 //
 // SETUP
 //
 void setup() {
-  configInputWithPullup(MODE_SWITCH_IN_PIN);
+  configInputWithPullup(MODE_SWITCH_IN_PIN_1);
+  configInputWithPullup(MODE_SWITCH_IN_PIN_2);
   configInputWithPullup(INTENSITY_SWITCH_IN_PIN_1);
   configInputWithPullup(INTENSITY_SWITCH_IN_PIN_2);
   configOutput(STATUS_LED_OUT_PIN);
-  configOutput(FAN_OUT_PIN);
   
-  configInt0Interrupt(); // triggered by PD2 (mode switch)
+//  configInt0Interrupt(); // triggered by PD2 (mode switch)
   configPinChangeInterrupts();
   sei();
   configPWM1();
@@ -152,221 +157,360 @@ void setup() {
   Serial.println(FAN_OUT_LOW_THRESHOLD);
   #endif
   
-  controlCycleBeginTime = millis();
-  intervalPhaseBeginTime = millis();
-  
-  fanMode = readFanModeFromInputPin();
-  fanIntensity = readFanIntensityFromInputPins();
-  handleInputChange(fanMode, fanIntensity, controlCycleBeginTime); 
-  
   setStatusLED(LOW);
+  fanIntensity = readFanIntensityFromInputPins();
+  fanMode = readFanModeFromInputPins();
+  if (fanMode != MODE_OFF) {
+     handleStateTransition(MODE_CHANGED);
+  }
+  
 }
+
 
 void loop() {
   uint32_t now = millis();
 
-  if (fanMode == MODE_INTERVAL) {
-    
-    if(intervalPhase == PHASE_FAN_ON) {
-      if (now - intervalPhaseBeginTime >= INTERVAL_FAN_ON_DURATION_MS) { // fan on is over
-        #ifdef VERBOSE
-          Serial.print("Mode INTERVAL, Phase: PAUSE, ");
-          Serial.println(intervalPauseDuration);
-        #endif
-        prepareFanDutyChange(FAN_OUT_FAN_OFF, now);
-        intervalPhase = PHASE_PAUSE;
-        intervalPhaseBeginTime = now;
-      }
+  switch(fanState) {
+    case FAN_OFF:
+       // sleep forever --> until interrupt happens
+      delay(10000);
+      break;
       
-    } else { // PHASE_PAUSE
-      if (now - intervalPhaseBeginTime >= intervalPauseDuration) { // pause is over
-        #ifdef VERBOSE
-          Serial.print("Mode INTERVAL, Phase: FAN ON, ");
-          Serial.println(INTERVAL_FAN_ON_DURATION_MS);
-        #endif
-        prepareFanDutyChange(FAN_OUT_INTERVAL_FAN_ON_DUTY_VALUE, now);
-        intervalPhase = PHASE_FAN_ON;
-        intervalPhaseBeginTime = now;
-        controlCycleCount = 0;
+    case FAN_SPEEDING_UP:
+      // When transistioning from OFF or STEADY, duty value is set to minimum -> let fab speed up to this first -> delay first
+      delay(SPEED_TRANSITION_CYCLE_DURATION_MS);
+      speedUp();
+      break;
+      
+    case FAN_STEADY:
+      if (fanMode == MODE_INTERVAL) {
+        // sleep until active phase is over
+        int32_t remaingingPhaseDuration = INTERVAL_FAN_ON_DURATION_MS - (now - intervalPhaseBeginTime);
+        if (remaingingPhaseDuration > 0) {
+          delay(remaingingPhaseDuration);
+        } else {
+          handleStateTransition(INTERVAL_PHASE_ENDED);
+        }
+      } else {
+        // sleep forever --> until interrupt happens
+        delay(10000);
       }
-      // blink LED
-      controlCycleCount++;
-      if (controlCycleCount >= 50) {
-        controlCycleCount = 0;
-        setStatusLED(HIGH);
-        delay(CONTROL_CYCLE_DURATION_MS);
-        setStatusLED(LOW);
+      break;
+      
+    case FAN_SLOWING_DOWN:
+      slowDown();
+      delay(SPEED_TRANSITION_CYCLE_DURATION_MS);
+      break;
+      
+    case FAN_PAUSING:
+      // sleep until next LED flash or until pause is over (whatever will happen first)
+      int32_t remaingingPhaseDuration = intervalPauseDuration - (now - intervalPhaseBeginTime);
+      if (remaingingPhaseDuration > 0) {
+        int32_t remaingingBlipDelay = INTERVAL_PAUSE_BLIP_OFF_DURATION_MS - (now - lastPauseBlipTime);
+        if (remaingingBlipDelay < 0) {
+          remaingingBlipDelay = 0;
+        }
+        if (remaingingPhaseDuration <= remaingingBlipDelay) {
+          delay(remaingingPhaseDuration);
+        } else {
+          delay(remaingingBlipDelay);
+          setStatusLED(HIGH);
+          lastPauseBlipTime = millis();
+          delay(INTERVAL_PAUSE_BLIP_ON_DURATION_MS);
+          setStatusLED(LOW);
+        }
+      } else {
+        handleStateTransition(INTERVAL_PHASE_ENDED);
       }
-    }
-  }
-  
-  if (fanState == FAN_SPEEDING_UP || fanState == FAN_SLOWING_DOWN) {
-    handleFanSpeedTransition(fanTargetDutyValue);
-  }
-  
-  delay(CONTROL_CYCLE_DURATION_MS);
-  
-}
-
-void handleInputChange(FanMode newMode, FanIntensity newIntensity, uint32_t now) {
-  if (newMode == MODE_OFF) {
-      #ifdef VERBOSE
-        Serial.println("Mode: OFF");
-      #endif
-      prepareFanDutyChange(FAN_OUT_FAN_OFF, now);
-
-  } else if (newMode == MODE_CONTINUOUS) {
-      uint8_t newTargetDutyValue = mapToFanDutyValue(newIntensity);
-      #ifdef VERBOSE
-        Serial.print("Mode CONTINUOUS, Duty Value: ");
-        Serial.println(newTargetDutyValue);
-      #endif
-      prepareFanDutyChange(newTargetDutyValue, now);
-
-  } else if (newMode == MODE_INTERVAL) {
-    intervalPauseDuration = mapToIntervalPauseDuration(newIntensity);
-    
-    if (fanState == FAN_OFF) {
-        intervalPhase = PHASE_PAUSE;
-        #ifdef VERBOSE
-          Serial.print("Mode INTERVAL, Phase: PAUSE, Pause: ");
-          Serial.println(intervalPauseDuration);
-        #endif
-        
-    } else {
-        intervalPhase = PHASE_FAN_ON;
-        uint8_t newTargetDutyValue = FAN_OUT_INTERVAL_FAN_ON_DUTY_VALUE;
-        prepareFanDutyChange(newTargetDutyValue, now);
-        #ifdef VERBOSE
-          Serial.print("Mode INTERVAL, Phase: FAN ON, Pause: ");
-          Serial.println(intervalPauseDuration);
-        #endif
-    }
-    intervalPhaseBeginTime = now;
+      break;
   }
 }
 
-void prepareFanDutyChange(uint8_t newTargetDutyValue, uint32_t now) {
-  if (newTargetDutyValue == fanActualDutyValue) {
+
+void handleStateTransition(Event event) {
+  if (event == EVENT_NONE) {
     return;
   }
+  uint32_t now = millis();
+  FanState beforeState = fanState;
   
-  transitionBeginTime = now;
-  
-  if (newTargetDutyValue == FAN_OUT_FAN_OFF && fanActualDutyValue > fanActualDutyValue) {
-    fanState = FAN_SLOWING_DOWN;
-    fanTargetDutyValue = FAN_OUT_FAN_OFF;
-    transitioningDutyValue = fanActualDutyValue;
-    #ifdef VERBOSE
-      Serial.println("STOPPING.");
-    #endif
-    return;
-  }
+  switch(fanState) {
     
-  if (newTargetDutyValue > fanActualDutyValue) {
-    fanState = FAN_SPEEDING_UP;
-    #ifdef VERBOSE
-      Serial.print("SPEEDING UP to ");
-      Serial.println(newTargetDutyValue);
-    #endif
+    case FAN_OFF:
+      switch(event) {
+        case MODE_CHANGED:
+          if (fanMode != MODE_OFF) {
+            fanState = FAN_SPEEDING_UP;
+            fanOn(fanMode);
+            intervalPhaseBeginTime = now;
+          }
+          break;
+          
+        case INTENSITY_CHANGED:
+          // noop: new value has been recorded in fanIntensity, will take effect on next mode change
+          break;
+          
+        default: 
+          break;
+      }
+      break;
       
-  } else if (newTargetDutyValue < fanActualDutyValue) { 
-    fanState = FAN_SLOWING_DOWN;
-    #ifdef VERBOSE
-      Serial.print("SLOWING DOWN to ");
-      Serial.println(newTargetDutyValue);
-    #endif
-  }
-  fanTargetDutyValue = newTargetDutyValue;
-  transitioningDutyValue = (fanActualDutyValue == FAN_OUT_FAN_OFF) ? FAN_OUT_LOW_THRESHOLD : fanActualDutyValue;
-}
-
-void handleFanSpeedTransition(uint8_t targetDutyValue) {
-  if (fanState == FAN_OFF || fanState == FAN_STEADY) {
-    return;
-  }
-  
-  if (fanState == FAN_SPEEDING_UP) {
-    // ensure we don't overrun the max value of uint8_t when incrementing:
-    uint8_t increment = min(ANALOG_OUT_MAX - transitioningDutyValue, FAN_START_INCREMENT);
-
-    if (fanActualDutyValue == FAN_OUT_FAN_OFF) {
-      // start fan up first, don't increment transitioningDutyValue at this time
+    case FAN_SPEEDING_UP: 
+      switch(event) {
+        case MODE_CHANGED:
+          if (fanMode == MODE_OFF) {
+            fanState = FAN_SLOWING_DOWN;
+            fanTargetDutyValue = FAN_OUT_FAN_OFF;
+          }
+          break;
+          
+        case INTENSITY_CHANGED: 
+          if (fanMode == MODE_CONTINUOUS) {
+            uint8_t newTargetDutyValue = mapToFanDutyValue(fanIntensity);
+            if (newTargetDutyValue > fanActualDutyValue) {
+              fanTargetDutyValue = newTargetDutyValue;
+            } else if (newTargetDutyValue < fanActualDutyValue) {
+              fanState = FAN_SLOWING_DOWN;
+              fanTargetDutyValue = newTargetDutyValue;
+            } else { /* newTargetDutyValue == fanActualDutyValue */
+              fanState = FAN_STEADY;
+              setStatusLED(LOW);
+            }
+          }
+          break;
+          
+        case TARGET_SPEED_REACHED: 
+          fanState = FAN_STEADY;
+          intervalPhaseBeginTime = now;
+          setStatusLED(LOW);
+          break;
+      }
+      break;
       
-    } else if (transitioningDutyValue + increment < targetDutyValue) {
-      transitioningDutyValue += increment;
-    } else {
-      transitioningDutyValue = targetDutyValue;
-    }
-    #ifdef VERBOSE
-      Serial.print("Speeding up: ");
-      Serial.println(transitioningDutyValue);
-    #endif
-    
-  } else if (fanState == FAN_SLOWING_DOWN) {
-    // ensure transitioningDutyValue will not become < 0 when decrementing (is an uint8_t!)
-    uint8_t decrement = min(transitioningDutyValue, FAN_STOP_DECREMENT);
+    case FAN_STEADY: 
+      switch(event) {
+        case MODE_CHANGED: 
+          if (fanMode == MODE_OFF) {
+            fanState = FAN_SLOWING_DOWN;
+            fanTargetDutyValue = FAN_OUT_FAN_OFF;
+          }
+          break;
+          
+        case INTENSITY_CHANGED: 
+          if (fanMode == MODE_CONTINUOUS) {
+            uint8_t newTargetDutyValue = mapToFanDutyValue(fanIntensity);
+            if (newTargetDutyValue > fanActualDutyValue) {
+              fanState = FAN_SPEEDING_UP;
+              fanTargetDutyValue = newTargetDutyValue;
+            } else if (newTargetDutyValue < fanActualDutyValue) {
+              fanState = FAN_SLOWING_DOWN;
+              fanTargetDutyValue = newTargetDutyValue;
+            } 
+          }
+          break;
 
-    if (fanActualDutyValue == FAN_OUT_LOW_THRESHOLD && targetDutyValue < FAN_OUT_LOW_THRESHOLD) {
-      transitioningDutyValue = FAN_OUT_FAN_OFF;
-    
-    } else if (transitioningDutyValue - decrement > max(targetDutyValue, FAN_OUT_LOW_THRESHOLD)) {
-      transitioningDutyValue -= decrement;
-    } else {
-      transitioningDutyValue = max(targetDutyValue, FAN_OUT_LOW_THRESHOLD);
-    }
-    #ifdef VERBOSE
-      Serial.print("Slowing down: ");
-      Serial.println(transitioningDutyValue);
-    #endif
+        case INTERVAL_PHASE_ENDED:
+          fanState = FAN_SLOWING_DOWN;
+          fanTargetDutyValue = FAN_OUT_FAN_OFF;
+          intervalPhaseBeginTime = now;
+          break;
+          
+        default:
+          break;
+      }
+      break;
+      
+    case FAN_SLOWING_DOWN: 
+      switch(event) {
+        case MODE_CHANGED:
+          if (fanMode == MODE_OFF) {
+            fanTargetDutyValue = FAN_OUT_FAN_OFF;
+          }
+          break;
+          
+        case INTENSITY_CHANGED: 
+          if (fanMode == MODE_CONTINUOUS) {
+            uint8_t newTargetDutyValue = mapToFanDutyValue(fanIntensity);
+            if (newTargetDutyValue > fanActualDutyValue) {
+              fanState = FAN_SPEEDING_UP;
+              fanTargetDutyValue = newTargetDutyValue;
+            } else if (newTargetDutyValue < fanActualDutyValue) {
+              fanTargetDutyValue = newTargetDutyValue;
+            } else {  /* newTargetDutyValue == fanActualDutyValue */
+              fanState = FAN_STEADY;
+              setStatusLED(LOW);
+            }
+          }
+          break;
+          
+        case TARGET_SPEED_REACHED: 
+          if (fanMode == MODE_OFF) {
+            fanState = FAN_OFF;
+            fanOff(MODE_INTERVAL);
+          } else if (fanMode == MODE_CONTINUOUS) {
+            fanState = FAN_STEADY;
+          } else {  // fanMode == MODE_INTERVAL
+            fanState = FAN_PAUSING;
+            fanOff(MODE_INTERVAL);
+            intervalPhaseBeginTime = now;
+            lastPauseBlipTime = now;
+          }
+          setStatusLED(LOW);
+          break;
+      }
+      break;
+      
+    case FAN_PAUSING:
+      switch(event) {
+        case MODE_CHANGED: 
+          if (fanMode == MODE_OFF) {
+            fanState = FAN_OFF;
+            fanOff(MODE_INTERVAL);
+          } else if (fanMode == MODE_CONTINUOUS) {
+            fanState = FAN_SPEEDING_UP;
+            fanOn(MODE_CONTINUOUS);
+          }
+          break;
+          
+        case INTENSITY_CHANGED: 
+          intervalPauseDuration = mapToIntervalPauseDuration(fanIntensity);
+          if (now - intervalPhaseBeginTime >= intervalPauseDuration) {  // pause is over
+            fanState = FAN_SPEEDING_UP;
+            fanOn(MODE_INTERVAL);
+            intervalPhaseBeginTime = now;
+          }
+          break;
+
+        case INTERVAL_PHASE_ENDED:
+          fanState = FAN_SPEEDING_UP;
+          fanOn(MODE_INTERVAL);
+          intervalPhaseBeginTime = now;
+          break;
+          
+        default: 
+          break;
+      }
+      break;
   }
-  setFanDutyValue(transitioningDutyValue);
-    
-  if (transitioningDutyValue == FAN_OUT_FAN_OFF) {
-    fanState = FAN_OFF;
-    transitionBeginTime = 0;
-    setStatusLED(LOW);
-    #ifdef VERBOSE
-      Serial.println("FAN OFF");
-    #endif
-  } else  if (transitioningDutyValue == targetDutyValue) {
-    fanState = FAN_STEADY;
-    transitionBeginTime = 0;
-    transitioningDutyValue = FAN_OUT_FAN_OFF;
-    setStatusLED(LOW);
-    #ifdef VERBOSE
-      Serial.println("FAN STEADY.");
-    #endif
-  } else {
-    if (BLINK_LED_DURING_SPEED_TRANSITION) {
-      invertStatusLED();
-    }
-  }
-}
-
-
-FanMode readFanModeFromInputPin() {
-  FanMode value = digitalRead(MODE_SWITCH_IN_PIN) ? MODE_INTERVAL : MODE_CONTINUOUS;
   #ifdef VERBOSE
-    Serial.print("Refresh Fan Mode:  ");
-    Serial.println(fanMode == MODE_INTERVAL ? "INTERVAL" : "CONTINUOUS");
+    Serial.print("State ");
+    Serial.print(fanStateName(beforeState));
+    Serial.print(" -- [");
+    Serial.print(eventName(event));
+    Serial.print("] --> State ");
+    Serial.println(fanStateName(fanState));
+  #endif
+}
+
+void fanOn(FanMode mode) {
+  configOutput(FAN_POWER_OUT_PIN);
+  configOutput(FAN_PWM_OUT_PIN);
+  setFanPower(HIGH);
+  setFanDutyValue(FAN_OUT_LOW_THRESHOLD);
+  if (mode == MODE_CONTINUOUS) {
+    fanTargetDutyValue = mapToFanDutyValue(fanIntensity);
+  } else { /* fanMode == MODE_INTERVAL */
+    fanTargetDutyValue = FAN_OUT_INTERVAL_FAN_ON_DUTY_VALUE;
+  }
+}
+
+void fanOff(FanMode mode) {
+  setFanPower(LOW);
+  setFanDutyValue(FAN_OUT_FAN_OFF);
+  if (mode == MODE_INTERVAL) {
+     intervalPauseDuration = mapToIntervalPauseDuration(fanIntensity);
+  }
+  configInput(FAN_POWER_OUT_PIN);
+  configInput(FAN_PWM_OUT_PIN);
+}
+
+
+void speedUp() {
+  uint8_t transitioningDutyValue = fanActualDutyValue;
+  
+  // ensure we don't overrun the max value of uint8_t when incrementing:
+  uint8_t increment = min(ANALOG_OUT_MAX - transitioningDutyValue, FAN_START_INCREMENT);
+
+  if (transitioningDutyValue + increment < fanTargetDutyValue) {
+    transitioningDutyValue += increment;
+  } else {
+    transitioningDutyValue = fanTargetDutyValue;
+  }
+  #ifdef VERBOSE
+    Serial.print("Speeding up: ");
+    Serial.println(transitioningDutyValue);
+  #endif
+  
+  setFanDutyValue(transitioningDutyValue);
+  if (fanActualDutyValue >= fanTargetDutyValue) {
+    handleStateTransition(TARGET_SPEED_REACHED);
+    
+  } else if (BLINK_LED_DURING_SPEED_TRANSITION) {
+    invertStatusLED();
+  }
+}
+
+
+void slowDown() {
+  uint8_t transitioningDutyValue = fanActualDutyValue;
+  
+  // ensure transitioningDutyValue will not become < 0 when decrementing (is an uint8_t!)
+  uint8_t decrement = min(transitioningDutyValue, FAN_STOP_DECREMENT);
+
+  if (fanActualDutyValue == FAN_OUT_LOW_THRESHOLD && fanTargetDutyValue < FAN_OUT_LOW_THRESHOLD) {
+    transitioningDutyValue = FAN_OUT_FAN_OFF;
+  
+  } else if (transitioningDutyValue - decrement > max(fanTargetDutyValue, FAN_OUT_LOW_THRESHOLD)) {
+    transitioningDutyValue -= decrement;
+  } else {
+    transitioningDutyValue = max(fanTargetDutyValue, FAN_OUT_LOW_THRESHOLD);
+  }
+  #ifdef VERBOSE
+    Serial.print("Slowing down: ");
+    Serial.println(transitioningDutyValue);
+  #endif
+  
+  setFanDutyValue(transitioningDutyValue);
+  if (fanActualDutyValue <= fanTargetDutyValue) {
+    handleStateTransition(TARGET_SPEED_REACHED);
+    
+  } else if (BLINK_LED_DURING_SPEED_TRANSITION) {
+    invertStatusLED();
+  }
+}
+
+
+FanMode readFanModeFromInputPins() {
+  uint8_t p1 = digitalRead(MODE_SWITCH_IN_PIN_1);
+  uint8_t p2 = digitalRead(MODE_SWITCH_IN_PIN_2);
+  FanMode value;
+  if (! p1 && p2) {
+    value = MODE_INTERVAL;
+  } else if(p1 && ! p2) {
+    value = MODE_CONTINUOUS;
+  } else {
+    value = MODE_OFF;
+  }
+  #ifdef VERBOSE
+    Serial.print("Read Fan Mode: ");
+    Serial.println(value == MODE_INTERVAL ? "INTERVAL" : (value == MODE_CONTINUOUS ? "CONTINUOUS" :"OFF"));
   #endif
   return value;
 }
 
 FanIntensity readFanIntensityFromInputPins() {
-  uint8_t v1 = digitalRead(INTENSITY_SWITCH_IN_PIN_1);
-  uint8_t v2 = digitalRead(INTENSITY_SWITCH_IN_PIN_2);
+  uint8_t p1 = digitalRead(INTENSITY_SWITCH_IN_PIN_1);
+  uint8_t p2 = digitalRead(INTENSITY_SWITCH_IN_PIN_2);
   FanIntensity value;
-  if (! v1 && v2) {
+  if (! p1 && p2) {
     value = INTENSITY_LOW;
-  } else if(v1 && ! v2) {
+  } else if(p1 && ! p2) {
     value = INTENSITY_HIGH;
   } else {
     value = INTENSITY_MEDIUM;
   }
   #ifdef VERBOSE
-    Serial.print("Refresh Fan Intensity:  ");
+    Serial.print("Read Fan Intensity: ");
     Serial.println(value == INTENSITY_LOW ? "LOW" : (value == INTENSITY_HIGH ? "HIGH" :"MEDIUM"));
   #endif
   return value;
@@ -405,7 +549,7 @@ uint32_t mapToIntervalPauseDuration(FanIntensity intensity) {
 void setFanDutyValue(uint8_t value) {
   fanActualDutyValue = value;
   #ifdef _ATMEGA328_
-    analogWrite(FAN_OUT_PIN, value); // Send PWM signal
+    analogWrite(FAN_PWM_OUT_PIN, value); // Send PWM signal
   #endif
   #ifdef _ATTINY85_
     OCR1A = value;
@@ -415,6 +559,10 @@ void setFanDutyValue(uint8_t value) {
 void setStatusLED(int value) {
   statusLEDState = value;
   digitalWrite(STATUS_LED_OUT_PIN, value);
+}
+
+void setFanPower(int value) {
+  digitalWrite(FAN_POWER_OUT_PIN, value);
 }
 
 void invertStatusLED() {
@@ -436,8 +584,8 @@ void configOutput(uint8_t pin) {
 
 void configInt0Interrupt() {
   #ifdef _ATMEGA328_
-    EIMSK |= (1<<INT0);      // Enable INT0 (external interrupt) 
-    EICRA |= (1<<ISC00);     // Any logical change triggers an interrupt
+//    EIMSK |= (1<<INT0);      // Enable INT0 (external interrupt) 
+//    EICRA |= (1<<ISC00);     // Any logical change triggers an interrupt
   #endif
   #ifdef _ATTINY85_
     GIMSK |= (1<<INT0);      // Enable INT0 (external interrupt) 
@@ -446,20 +594,23 @@ void configInt0Interrupt() {
 }
 
 ISR (INT0_vect) {       // Interrupt service routine for INT0 on PB2
-  FanMode value = readFanModeFromInputPin();
+  FanMode value = readFanModeFromInputPins();
   if (value != fanMode) {    // debounce switch (may cause multiple interrupts)
     fanMode = value;
-    uint32_t now = millis();
-    handleInputChange(fanMode, fanIntensity, now);
+    handleStateTransition(MODE_CHANGED);
   }
 }
 
 void configPinChangeInterrupts() {
   // Pin-change interrupts are triggered for each level-change; this cannot be configured
   #ifdef _ATMEGA328_
+    PCICR |= (1<<PCIE0);                       // Enable pin-change interrupt 0 
+//    PCIFR |= (1<<PCIF0);                       // Enable PCINT0..5 (pins PB0..PB5) 
+    PCMSK0 |= (1<<PCINT0) | (1<<PCINT1);       // Configure pins PB0, PB1
+    
     PCICR |= (1<<PCIE2);                       // Enable pin-change interrupt 2 
-    PCIFR |= (1<<PCIF2);                       // Enable PCINT16..23 (pins PD0..PD7) 
-    PCMSK2 |= (1<<PCINT21) | (1<<PCINT22) | (1<<PCINT23);     // Configure pins PD5, PD6
+//    PCIFR |= (1<<PCIF2);                       // Enable PCINT16..23 (pins PD0..PD7) 
+    PCMSK2 |= (1<<PCINT22) | (1<<PCINT23);     // Configure pins PD6, PD7
   #endif
   #ifdef _ATTINY85_
     GIMSK|= (1<<PCIE);
@@ -467,12 +618,19 @@ void configPinChangeInterrupts() {
   #endif
 }
 
-ISR (PCINT2_vect) {       // Interrupt service routine for Pin Change Interrupt Request 0
+ISR (PCINT0_vect) {       // Interrupt service routine for Pin Change Interrupt Request 0
+  FanMode value = readFanModeFromInputPins();
+  if (value != fanMode) {    // debounce switch (may cause multiple interrupts)
+    fanMode = value;
+    handleStateTransition(MODE_CHANGED);
+  }
+}
+
+ISR (PCINT2_vect) {       // Interrupt service routine for Pin Change Interrupt Request 2
   FanIntensity value = readFanIntensityFromInputPins();  
   if (value != fanIntensity) {    // debounce switch (may cause multiple interrupts)
     fanIntensity = value;
-    uint32_t now = millis();
-    handleInputChange(fanMode, fanIntensity, now);
+    handleStateTransition(INTENSITY_CHANGED);
   }
 }
 
@@ -512,3 +670,27 @@ void configPWM1() {
     OCR1A = 0;
   #endif
 }
+
+#ifdef VERBOSE
+char* fanStateName(FanState state) {
+  switch (state) {
+    case FAN_OFF: return "OFF";
+    case FAN_SPEEDING_UP: return "SPEEDING UP";
+    case FAN_STEADY: return "STEADY";
+    case FAN_SLOWING_DOWN: return "SLOWING DOWN";
+    case FAN_PAUSING: return "PAUSE";
+    default: return "?";
+  }
+}
+
+char* eventName(Event event) {
+  switch (event) {
+    case EVENT_NONE: return "NONE";
+    case MODE_CHANGED: return "Mode changed";
+    case INTENSITY_CHANGED: return "Intensity changed";
+    case TARGET_SPEED_REACHED: return "Speed reached";
+    case INTERVAL_PHASE_ENDED: return "Phase ended";
+    default: return "?";
+  }
+}
+#endif

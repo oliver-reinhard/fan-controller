@@ -1,6 +1,7 @@
+//#define F_CPU 128000UL                  // Defaults to 1 MHz
 
-#include<avr/io.h>
-#include<util/delay.h>
+//#include<avr/io.h>
+//#include <util/delay.h>
 
 // --------------------
 // CONFIGURABLE VALUES
@@ -36,7 +37,7 @@ const bool BLINK_LED_DURING_SPEED_TRANSITION = false;
 // DO NOT TOUCH THE VALUES OF THE FOLLOWING CONSTANTS
 // --------------------
 
-#ifdef __AVR_ATmega328P__
+#if defined(__AVR_ATmega328P__)
   #define VERBOSE
   const uint8_t MODE_SWITCH_IN_PIN_1 = 8;         // PB0 - digital: PB0==LOW  && PB1==HIGH  --> INTERVAL
   const uint8_t MODE_SWITCH_IN_PIN_2 = 9;         // PB1 - digital: PB0==HIGH && PB1==LOW   --> CONTINUOUS
@@ -46,10 +47,9 @@ const bool BLINK_LED_DURING_SPEED_TRANSITION = false;
                                                   //                PD6==HIGH && PD7==HIGH  --> MEDIUM INTENSITY
   const uint8_t FAN_PWM_OUT_PIN = 3;              // PD3 - PWM signal @ native frequency (490 Hz)
   const uint8_t FAN_POWER_OUT_PIN = 4;            // PD4 - fan power: MOSFET on/off
-  const uint8_t STATUS_LED_OUT_PIN = 5;           // PD5 - digital out; is on when fan is of, blinks during transitioning
-#endif 
+  const uint8_t STATUS_LED_OUT_PIN = 5;           // PD5 - digital out; is on when fan is of, blinks during transitioning 
 
-#ifdef __AVR_ATtiny85__
+#elif defined(__AVR_ATtiny85__)
   const uint8_t MODE_SWITCH_IN_PIN = PB2;         // digital: LOW --> CONTINOUS, HIGH --> INTERVAL
   const uint8_t INTENSITY_SWITCH_IN_PIN_1 = PB3;  // digital: PB3==LOW && PB4==HIGH --> LOW INTENSITY, BOTH=LOW --> MEDIUM
   const uint8_t INTENSITY_SWITCH_IN_PIN_2 = PB4;  // digital: PB3==HIGH && PB4==LOW --> HIGH INTENSITY
@@ -89,11 +89,11 @@ const uint32_t SPEED_TRANSITION_CYCLE_DURATION_MS = 200; // [ms]
 // ANALOG OUT
 //
 //
-#ifdef __AVR_ATmega328P__
+#if defined(__AVR_ATmega328P__)
 const uint8_t ANALOG_OUT_MIN = 0;        // Arduino constant
 const uint8_t ANALOG_OUT_MAX = 255;      // PWM control
-#endif
-#ifdef __AVR_ATtiny85__
+
+#elif defined(__AVR_ATtiny85__)
 // PWM frequency = 1 MHz / 1 / 40 = 25 kHz 
 const uint8_t TIMER1_PRESCALER = 1;     // divide by 1
 const uint8_t TIMER1_COUNT_TO = 40;    // count to 40
@@ -545,10 +545,10 @@ uint32_t mapToIntervalPauseDuration(FanIntensity intensity) {
 
 void setFanDutyValue(uint8_t value) {
   fanActualDutyValue = value;
-  #ifdef __AVR_ATmega328P__
+  #if defined(__AVR_ATmega328P__)
     analogWrite(FAN_PWM_OUT_PIN, value); // Send PWM signal
-  #endif
-  #ifdef __AVR_ATtiny85__
+
+  #elif defined(__AVR_ATtiny85__)
     OCR1A = value;
   #endif
 }
@@ -580,13 +580,13 @@ void configOutput(uint8_t pin) {
 }
 
 void configInt0Interrupt() {
-  #ifdef __AVR_ATmega328P__
-//    EIMSK |= (1<<INT0);      // Enable INT0 (external interrupt) 
-//    EICRA |= (1<<ISC00);     // Any logical change triggers an interrupt
-  #endif
-  #ifdef __AVR_ATtiny85__
-    GIMSK |= (1<<INT0);      // Enable INT0 (external interrupt) 
-    MCUCR |= (1<<ISC00);     // Any logical change triggers an interrupt
+  #if defined(__AVR_ATmega328P__)
+//    EIMSK |= _BV(INT0);      // Enable INT0 (external interrupt) 
+//    EICRA |= _BV(ISC00);     // Any logical change triggers an interrupt
+
+  #elif defined(__AVR_ATtiny85__)
+    GIMSK |= _BV(INT0);      // Enable INT0 (external interrupt) 
+    MCUCR |= _BV(ISC00);     // Any logical change triggers an interrupt
   #endif
 }
 
@@ -600,18 +600,18 @@ ISR (INT0_vect) {       // Interrupt service routine for INT0 on PB2
 
 void configPinChangeInterrupts() {
   // Pin-change interrupts are triggered for each level-change; this cannot be configured
-  #ifdef __AVR_ATmega328P__
-    PCICR |= (1<<PCIE0);                       // Enable pin-change interrupt 0 
-//    PCIFR |= (1<<PCIF0);                       // Enable PCINT0..5 (pins PB0..PB5) 
-    PCMSK0 |= (1<<PCINT0) | (1<<PCINT1);       // Configure pins PB0, PB1
+  #if defined(__AVR_ATmega328P__)
+    PCICR |= _BV(PCIE0);                       // Enable pin-change interrupt 0 
+//    PCIFR |= _BV(PCIF0);                       // Enable PCINT0..5 (pins PB0..PB5) 
+    PCMSK0 |= _BV(PCINT0) | _BV(PCINT1);       // Configure pins PB0, PB1
     
-    PCICR |= (1<<PCIE2);                       // Enable pin-change interrupt 2 
-//    PCIFR |= (1<<PCIF2);                       // Enable PCINT16..23 (pins PD0..PD7) 
-    PCMSK2 |= (1<<PCINT22) | (1<<PCINT23);     // Configure pins PD6, PD7
-  #endif
-  #ifdef __AVR_ATtiny85__
-    GIMSK|= (1<<PCIE);
-    PCMSK|= (1<<PCINT1) | (1<<PCINT3);    // Configure PB1 and PB3 as interrupt source
+    PCICR |= _BV(PCIE2);                       // Enable pin-change interrupt 2 
+//    PCIFR |= _BV(PCIF2);                       // Enable PCINT16..23 (pins PD0..PD7) 
+    PCMSK2 |= _BV(PCINT22) | _BV(PCINT23);     // Configure pins PD6, PD7
+
+  #elif defined(__AVR_ATtiny85__)
+    GIMSK|= _BV(PCIE);
+    PCMSK|= _BV(PCINT1) | _BV(PCINT3);    // Configure PB1 and PB3 as interrupt source
   #endif
 }
 
@@ -632,12 +632,11 @@ ISR (PCINT2_vect) {       // Interrupt service routine for Pin Change Interrupt 
 }
 
 void configPWM1() {
-  #ifdef __AVR_ATmega328P__
+  #if defined(__AVR_ATmega328P__)
     // nothing --> use analogWrite as is
     // No specific PWM frequency
-  #endif
   
-  #ifdef __AVR_ATtiny85__
+  #elif defined(__AVR_ATtiny85__)
     // Configure Timer/Counter1 Control Register 1 (TCR1) 
     // | CTC1 | PWM1A | COM1A | CS |
     // |  1   |  1    |  2    | 4  |  ->  #bits
@@ -651,13 +650,13 @@ void configPWM1() {
     TCCR1 &= B00000000;      // Clear 
   
     // Clear Timer/Counter on Compare Match: count from 0, 1, 2 .. OCR1C, 0, 1, 2 .. ORC1C, etc
-    TCCR1 |= (1<<CTC1);
+    TCCR1 |= _BV(CTC1);
     
     // Enable PWM A based on OCR1A
-    TCCR1 |= (1<<PWM1A);
+    TCCR1 |= _BV(PWM1A);
     
     // On Compare Match with OCR1A (counter == OCR1A): Clear the output line (-> LOW), set on $00
-    TCCR1 |= (1<<COM1A1);
+    TCCR1 |= _BV(COM1A1);
   
     // Configure PWM frequency:
     TCCR1 |= TIMER1_PRESCALER;  // Prescale factor

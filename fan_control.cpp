@@ -1,11 +1,10 @@
-
 #include "fan_control.h"
 #include "fan_util.h"
 #include "fan_io.h"
 
 //
 // ANALOG OUT
-//;
+//
 const uint8_t FAN_OUT_FAN_OFF = ANALOG_OUT_MIN;
 
 // Continuous mode:
@@ -13,7 +12,7 @@ const uint8_t FAN_OUT_CONTINUOUS_LOW_DUTY_VALUE = (uint32_t) ANALOG_OUT_MAX * FA
 const uint8_t FAN_OUT_CONTINUOUS_MEDIUM_DUTY_VALUE = (uint32_t) ANALOG_OUT_MAX * FAN_CONTINUOUS_MEDIUM_VOLTAGE /  FAN_MAX_VOLTAGE;
 const uint8_t FAN_OUT_CONTINUOUS_HIGH_DUTY_VALUE = (uint32_t) ANALOG_OUT_MAX * FAN_CONTINUOUS_HIGH_VOLTAGE /  FAN_MAX_VOLTAGE;
 
-const uint8_t FAN_OUT_INTERVAL_FAN_ON_DUTY_VALUE = (uint32_t) ANALOG_OUT_MAX * FAN_INTERVAL_FAN_ON_VOLTAGE /  FAN_MAX_VOLTAGE;
+const uint8_t FAN_OUT_INTERVAL_FAN_ON_DUTY_VALUE = (uint32_t) ANALOG_OUT_MAX * INTERVAL_FAN_ON_VOLTAGE /  FAN_MAX_VOLTAGE;
 
 // Fan soft start and soft stop:
 const uint16_t FAN_START_INCREMENT = (uint32_t) (ANALOG_OUT_MAX - FAN_OUT_LOW_THRESHOLD) * SPEED_TRANSITION_CYCLE_DURATION_MS / FAN_START_DURATION_MS;
@@ -23,15 +22,12 @@ const uint16_t FAN_STOP_DECREMENT = (uint32_t) (ANALOG_OUT_MAX - FAN_OUT_LOW_THR
 // CONTROLLER
 //
 
-FanState fanState = FAN_OFF;          // current fan state
-Event pendingEvent = EVENT_NONE;
+volatile FanState fanState = FAN_OFF;          // current fan state
   
-uint8_t fanTargetDutyValue = FAN_OUT_FAN_OFF; // value derived from input-pin values
+volatile uint8_t fanTargetDutyValue = FAN_OUT_FAN_OFF; // value derived from input-pin values
 
-uint8_t transitioningDutyValue = ANALOG_OUT_MIN; // incremented in discrete steps until fan is at its target speed or its low threshold
-
-uint32_t intervalPhaseBeginTime = 0; // [ms]
-uint32_t intervalPauseDuration;      // [ms]
+volatile uint32_t intervalPhaseBeginTime = 0; // [ms]
+volatile uint32_t intervalPauseDuration;      // [ms]
 
 //
 // FUNCTIONS
@@ -52,7 +48,9 @@ uint32_t getIntervalPauseDuration() {
 }
 
 bool isPwmActive() {
-  return getFanMode() == MODE_CONTINUOUS && getFanDutyCycle() > ANALOG_OUT_MIN && getFanDutyCycle() < ANALOG_OUT_MAX;
+  return fanState == FAN_STEADY && getFanDutyCycle() > ANALOG_OUT_MIN && getFanDutyCycle() < ANALOG_OUT_MAX
+    || fanState == FAN_SPEEDING_UP
+    || fanState == FAN_SLOWING_DOWN;
 }
 
 // Applicable only in mode CONTINUOUS
@@ -105,7 +103,7 @@ uint32_t mapToIntervalPauseDuration(FanIntensity intensity) {
 #endif
 
 void fanOn(FanMode mode) {
-  configOutput(FAN_POWER_OUT_PIN);
+  configOutput(FAN_POWER_ON_OUT_PIN);
   configOutput(FAN_PWM_OUT_PIN);
   setFanPower(HIGH);
   setFanDutyCycle(FAN_OUT_LOW_THRESHOLD);
@@ -122,7 +120,7 @@ void fanOff(FanMode mode) {
   if (mode == MODE_INTERVAL) {
      intervalPauseDuration = mapToIntervalPauseDuration(getFanIntensity());
   }
-  configInput(FAN_POWER_OUT_PIN);
+  configInput(FAN_POWER_ON_OUT_PIN);
   configInput(FAN_PWM_OUT_PIN);
 }
 
@@ -356,41 +354,5 @@ void handleStateTransition(Event event) {
     Serial.print(eventName(event));
     Serial.print("] --> State ");
     Serial.println(fanStateName(fanState));
-  #endif
-}
-
-void configPWM1() {
-  #if defined(__AVR_ATmega328P__)
-    // nothing --> use analogWrite as is
-    // No specific PWM frequency
-  
-  #elif defined(__AVR_ATtiny85__)
-    // Configure Timer/Counter1 Control Register 1 (TCR1) 
-    // | CTC1 | PWM1A | COM1A | CS |
-    // |  1   |  1    |  2    | 4  |  ->  #bits
-    //
-    // CTC1 - Clear Timer/Counter on Compare Match: When set (==1), TCC1 is reset to $00 in the CPU clock cycle after a compare match with OCR1C register value.
-    // PWM1A - Pulse Width Modulator A Enable: When set (==1), enables PWM mode based on comparator OCR1A in TC1 and the counter value is reset to $00 in the CPU clock cycle after a compare match with OCR1C register value.
-    // COM1A - Comparator A Output Mode: determines output-pin action following a compare match with compare register A (OCR1A) in TC1
-    // CS - Clock Select Bits: defines the prescaling factor of TC1
-  
-    // Clear all TCCR1 bits:
-    TCCR1 &= B00000000;      // Clear 
-  
-    // Clear Timer/Counter on Compare Match: count from 0, 1, 2 .. OCR1C, 0, 1, 2 .. ORC1C, etc
-    TCCR1 |= _BV(CTC1);
-    
-    // Enable PWM A based on OCR1A
-    TCCR1 |= _BV(PWM1A);
-    
-    // On Compare Match with OCR1A (counter == OCR1A): Clear the output line (-> LOW), set on $00
-    TCCR1 |= _BV(COM1A1);
-  
-    // Configure PWM frequency:
-    TCCR1 |= TIMER1_PRESCALER;  // Prescale factor
-    OCR1C = TIMER1_COUNT_TO;    // Count 0,1,2..compare-match,0,1,2..compare-match, etc
-  
-    // Determines Duty Cycle: OCR1A / OCR1C e.g. value of 50 / 200 --> 25%,  value of 50 --> 0%
-    OCR1A = 0;
   #endif
 }

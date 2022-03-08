@@ -1,4 +1,3 @@
-
 #include "fan_util.h"
   
 void configInput(uint8_t pin) {

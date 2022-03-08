@@ -1,4 +1,3 @@
-
 #include "fan_io.h"
 #include "fan_util.h"
 
@@ -6,10 +5,10 @@ bool statusLEDState = LOW;
 
 uint32_t lastPauseBlipTime = 0;
 
-uint8_t fanDutyCycleValue = 0; // value actually set on output pin
+volatile uint8_t fanDutyCycleValue = 0; // value actually set on output pin
 
-FanMode fanMode = MODE_UNDEF;
-FanIntensity fanIntensity = INTENSITY_UNDEF;
+volatile FanMode fanMode = MODE_UNDEF;
+volatile FanIntensity fanIntensity = INTENSITY_UNDEF;
 
 void configInputPins() {
   configInputWithPullup(MODE_SWITCH_IN_PIN_1);
@@ -26,7 +25,7 @@ void configOutputPins() {
 }
 
 
-bool updateFanModeFromInputPins() {
+boolean updateFanModeFromInputPins() {
   uint8_t p1 = digitalRead(MODE_SWITCH_IN_PIN_1);
   uint8_t p2 = digitalRead(MODE_SWITCH_IN_PIN_2);
   FanMode value;
@@ -49,7 +48,7 @@ bool updateFanModeFromInputPins() {
   return false;
 }
 
-bool updateFanIntensityFromInputPins() {
+boolean updateFanIntensityFromInputPins() {
   uint8_t p1 = digitalRead(INTENSITY_SWITCH_IN_PIN_1);
   uint8_t p2 = digitalRead(INTENSITY_SWITCH_IN_PIN_2);
   FanIntensity value;
@@ -123,6 +122,42 @@ void configPinChangeInterrupts() {
 }
 
 
+void configPWM1() {
+  #if defined(__AVR_ATmega328P__)
+    // nothing --> use analogWrite as is
+    // No specific PWM frequency
+  
+  #elif defined(__AVR_ATtiny85__)
+    // Configure Timer/Counter1 Control Register 1 (TCR1) 
+    // | CTC1 | PWM1A | COM1A | CS |
+    // |  1   |  1    |  2    | 4  |  ->  #bits
+    //
+    // CTC1 - Clear Timer/Counter on Compare Match: When set (==1), TCC1 is reset to $00 in the CPU clock cycle after a compare match with OCR1C register value.
+    // PWM1A - Pulse Width Modulator A Enable: When set (==1), enables PWM mode based on comparator OCR1A in TC1 and the counter value is reset to $00 in the CPU clock cycle after a compare match with OCR1C register value.
+    // COM1A - Comparator A Output Mode: determines output-pin action following a compare match with compare register A (OCR1A) in TC1
+    // CS - Clock Select Bits: defines the prescaling factor of TC1
+  
+    // Clear all TCCR1 bits:
+    TCCR1 &= B00000000;      // Clear 
+  
+    // Clear Timer/Counter on Compare Match: count from 0, 1, 2 .. OCR1C, 0, 1, 2 .. ORC1C, etc
+    TCCR1 |= _BV(CTC1);
+    
+    // Enable PWM A based on OCR1A
+    TCCR1 |= _BV(PWM1A);
+    
+    // On Compare Match with OCR1A (counter == OCR1A): Clear the output line (-> LOW), set on $00
+    TCCR1 |= _BV(COM1A1);
+  
+    // Configure PWM frequency:
+    TCCR1 |= TIMER1_PRESCALER;  // Prescale factor
+    OCR1C = TIMER1_COUNT_TO;    // Count 0,1,2..compare-match,0,1,2..compare-match, etc
+  
+    // Determines Duty Cycle: OCR1A / OCR1C e.g. value of 50 / 200 --> 25%,  value of 50 --> 0%
+    OCR1A = 0;
+  #endif
+}
+
 void setFanDutyCycle(uint8_t value) {
   fanDutyCycleValue = value;
   #if defined(__AVR_ATmega328P__)
@@ -136,13 +171,13 @@ void setFanDutyCycle(uint8_t value) {
 uint8_t getFanDutyCycle() {
   return fanDutyCycleValue;
 }
-void setStatusLED(bool on) {
+void setStatusLED(boolean on) {
   statusLEDState = on;
   digitalWrite(STATUS_LED_OUT_PIN, on);
 }
 
-void setFanPower(bool on) {
-  digitalWrite(FAN_POWER_OUT_PIN, on);
+void setFanPower(boolean on) {
+  digitalWrite(FAN_POWER_ON_OUT_PIN, on);
 }
 
 void invertStatusLED() {

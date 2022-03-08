@@ -94,8 +94,8 @@ FanIntensity getFanIntensity() {
 
 void configInt0Interrupt() {
   #if defined(__AVR_ATmega328P__)
-//    EIMSK |= _BV(INT0);      // Enable INT0 (external interrupt) 
-//    EICRA |= _BV(ISC00);     // Any logical change triggers an interrupt
+    EIMSK |= _BV(INT0);      // Enable INT0 (external interrupt) 
+    EICRA |= _BV(ISC00);     // Any logical change triggers an interrupt
 
   #elif defined(__AVR_ATtiny85__)
     GIMSK |= _BV(INT0);      // Enable INT0 (external interrupt) 
@@ -108,11 +108,9 @@ void configPinChangeInterrupts() {
   // Pin-change interrupts are triggered for each level-change; this cannot be configured
   #if defined(__AVR_ATmega328P__)
     PCICR |= _BV(PCIE0);                       // Enable pin-change interrupt 0 
-//    PCIFR |= _BV(PCIF0);                       // Enable PCINT0..5 (pins PB0..PB5) 
     PCMSK0 |= _BV(PCINT0) | _BV(PCINT1);       // Configure pins PB0, PB1
     
-    PCICR |= _BV(PCIE2);                       // Enable pin-change interrupt 2 
-//    PCIFR |= _BV(PCIF2);                       // Enable PCINT16..23 (pins PD0..PD7) 
+    PCICR |= _BV(PCIE2);                       // Enable pin-change interrupt 2  
     PCMSK2 |= _BV(PCINT22) | _BV(PCINT23);     // Configure pins PD6, PD7
 
   #elif defined(__AVR_ATtiny85__)

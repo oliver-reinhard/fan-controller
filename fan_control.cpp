@@ -1,22 +1,21 @@
 #include "fan_control.h"
-#include "fan_util.h"
-#include "fan_io.h"
+#include "low_power.h"
 
 //
 // ANALOG OUT
 //
-const uint8_t FAN_OUT_FAN_OFF = ANALOG_OUT_MIN;
+const pwm_duty_t FAN_OUT_FAN_OFF = ANALOG_OUT_MIN;
 
 // Continuous mode:
-const uint8_t FAN_OUT_CONTINUOUS_LOW_DUTY_VALUE = (uint32_t) ANALOG_OUT_MAX * FAN_CONTINUOUS_LOW_VOLTAGE /  FAN_MAX_VOLTAGE;
-const uint8_t FAN_OUT_CONTINUOUS_MEDIUM_DUTY_VALUE = (uint32_t) ANALOG_OUT_MAX * FAN_CONTINUOUS_MEDIUM_VOLTAGE /  FAN_MAX_VOLTAGE;
-const uint8_t FAN_OUT_CONTINUOUS_HIGH_DUTY_VALUE = (uint32_t) ANALOG_OUT_MAX * FAN_CONTINUOUS_HIGH_VOLTAGE /  FAN_MAX_VOLTAGE;
+const pwm_duty_t FAN_OUT_CONTINUOUS_LOW_DUTY_VALUE = (uint32_t) ANALOG_OUT_MAX * FAN_CONTINUOUS_LOW_VOLTAGE /  FAN_MAX_VOLTAGE;
+const pwm_duty_t FAN_OUT_CONTINUOUS_MEDIUM_DUTY_VALUE = (uint32_t) ANALOG_OUT_MAX * FAN_CONTINUOUS_MEDIUM_VOLTAGE /  FAN_MAX_VOLTAGE;
+const pwm_duty_t FAN_OUT_CONTINUOUS_HIGH_DUTY_VALUE = (uint32_t) ANALOG_OUT_MAX * FAN_CONTINUOUS_HIGH_VOLTAGE /  FAN_MAX_VOLTAGE;
 
-const uint8_t FAN_OUT_INTERVAL_FAN_ON_DUTY_VALUE = (uint32_t) ANALOG_OUT_MAX * INTERVAL_FAN_ON_VOLTAGE /  FAN_MAX_VOLTAGE;
+const pwm_duty_t FAN_OUT_INTERVAL_FAN_ON_DUTY_VALUE = (uint32_t) ANALOG_OUT_MAX * INTERVAL_FAN_ON_VOLTAGE /  FAN_MAX_VOLTAGE;
 
 // Fan soft start and soft stop:
-const uint16_t FAN_START_INCREMENT = (uint32_t) (ANALOG_OUT_MAX - FAN_OUT_LOW_THRESHOLD) * SPEED_TRANSITION_CYCLE_DURATION_MS / FAN_START_DURATION_MS;
-const uint16_t FAN_STOP_DECREMENT = (uint32_t) (ANALOG_OUT_MAX - FAN_OUT_LOW_THRESHOLD) * SPEED_TRANSITION_CYCLE_DURATION_MS / FAN_STOP_DURATION_MS;
+const time16_ms_t FAN_START_INCREMENT = (time32_ms_t) (ANALOG_OUT_MAX - FAN_OUT_LOW_THRESHOLD) * SPEED_TRANSITION_CYCLE_DURATION_MS / FAN_START_DURATION_MS;
+const time16_ms_t FAN_STOP_DECREMENT = (time32_ms_t) (ANALOG_OUT_MAX - FAN_OUT_LOW_THRESHOLD) * SPEED_TRANSITION_CYCLE_DURATION_MS / FAN_STOP_DURATION_MS;
 
 //
 // CONTROLLER
@@ -24,10 +23,10 @@ const uint16_t FAN_STOP_DECREMENT = (uint32_t) (ANALOG_OUT_MAX - FAN_OUT_LOW_THR
 
 volatile FanState fanState = FAN_OFF;          // current fan state
   
-volatile uint8_t fanTargetDutyValue = FAN_OUT_FAN_OFF; // value derived from input-pin values
+volatile pwm_duty_t fanTargetDutyValue = FAN_OUT_FAN_OFF; // value derived from input-pin values
 
-volatile uint32_t intervalPhaseBeginTime = 0; // [ms]
-volatile uint32_t intervalPauseDuration;      // [ms]
+volatile time32_ms_t intervalPhaseBeginTime = 0; // [ms]
+volatile time32_ms_t intervalPauseDuration;      // [ms]
 
 //
 // FUNCTIONS
@@ -38,23 +37,17 @@ FanState getFanState() {
 }
 
 // [ms]
-uint32_t getIntervalPhaseBeginTime() { 
+time32_ms_t getIntervalPhaseBeginTime() { 
   return intervalPhaseBeginTime;
 }
 
 // [ms]
-uint32_t getIntervalPauseDuration() {
+time32_ms_t getIntervalPauseDuration() {
   return intervalPauseDuration;
 }
 
-bool isPwmActive() {
-  return fanState == FAN_STEADY && getFanDutyCycle() > ANALOG_OUT_MIN && getFanDutyCycle() < ANALOG_OUT_MAX
-    || fanState == FAN_SPEEDING_UP
-    || fanState == FAN_SLOWING_DOWN;
-}
-
 // Applicable only in mode CONTINUOUS
-uint8_t mapToFanDutyValue(FanIntensity intensity) {
+pwm_duty_t mapToFanDutyValue(FanIntensity intensity) {
   switch(intensity) {
     case INTENSITY_HIGH: 
       return FAN_OUT_CONTINUOUS_HIGH_DUTY_VALUE;
@@ -67,14 +60,14 @@ uint8_t mapToFanDutyValue(FanIntensity intensity) {
 
 // Applicable only in mode INTERVAL
 // Returns [ms]
-uint32_t mapToIntervalPauseDuration(FanIntensity intensity) {
+time32_ms_t mapToIntervalPauseDuration(FanIntensity intensity) {
   switch(intensity) {
     case INTENSITY_HIGH: 
-      return (uint32_t) INTERVAL_PAUSE_SHORT_DURATION * 1000; // [ms]
+      return (time32_ms_t) INTERVAL_PAUSE_SHORT_DURATION * 1000; // [ms]
     case INTENSITY_MEDIUM: 
-      return (uint32_t) INTERVAL_PAUSE_MEDIUM_DURATION * 1000; // [ms]
+      return (time32_ms_t) INTERVAL_PAUSE_MEDIUM_DURATION * 1000; // [ms]
     default: 
-      return (uint32_t) INTERVAL_PAUSE_LONG_DURATION * 1000; // [ms]
+      return (time32_ms_t) INTERVAL_PAUSE_LONG_DURATION * 1000; // [ms]
   }
 }
   
@@ -126,10 +119,10 @@ void fanOff(FanMode mode) {
 
 
 void speedUp() {
-  uint8_t transitioningDutyValue = getFanDutyCycle();
+  pwm_duty_t transitioningDutyValue = getFanDutyCycle();
   
   // ensure we don't overrun the max value of uint8_t when incrementing:
-  uint8_t increment = min(ANALOG_OUT_MAX - transitioningDutyValue, FAN_START_INCREMENT);
+  pwm_duty_t increment = min(ANALOG_OUT_MAX - transitioningDutyValue, FAN_START_INCREMENT);
 
   if (transitioningDutyValue + increment < fanTargetDutyValue) {
     transitioningDutyValue += increment;
@@ -152,10 +145,10 @@ void speedUp() {
 
 
 void slowDown() {
-  uint8_t transitioningDutyValue = getFanDutyCycle();
+  pwm_duty_t transitioningDutyValue = getFanDutyCycle();
   
   // ensure transitioningDutyValue will not become < 0 when decrementing (is an uint8_t!)
-  uint8_t decrement = min(transitioningDutyValue, FAN_STOP_DECREMENT);
+  pwm_duty_t decrement = min(transitioningDutyValue, FAN_STOP_DECREMENT);
 
   if (getFanDutyCycle() == FAN_OUT_LOW_THRESHOLD && fanTargetDutyValue < FAN_OUT_LOW_THRESHOLD) {
     transitioningDutyValue = FAN_OUT_FAN_OFF;
@@ -185,7 +178,7 @@ void handleStateTransition(Event event) {
   if (event == EVENT_NONE) {
     return;
   }
-  uint32_t now = millis();
+  time32_ms_t now = _millis();
   FanState beforeState = fanState;
   
   switch(fanState) {
@@ -220,7 +213,7 @@ void handleStateTransition(Event event) {
           
         case INTENSITY_CHANGED: 
           if (getFanMode() == MODE_CONTINUOUS) {
-            uint8_t newTargetDutyValue = mapToFanDutyValue(getFanIntensity());
+            pwm_duty_t newTargetDutyValue = mapToFanDutyValue(getFanIntensity());
             if (newTargetDutyValue > getFanDutyCycle()) {
               fanTargetDutyValue = newTargetDutyValue;
             } else if (newTargetDutyValue < getFanDutyCycle()) {
@@ -252,7 +245,7 @@ void handleStateTransition(Event event) {
           
         case INTENSITY_CHANGED: 
           if (getFanMode() == MODE_CONTINUOUS) {
-            uint8_t newTargetDutyValue = mapToFanDutyValue(getFanIntensity());
+            pwm_duty_t newTargetDutyValue = mapToFanDutyValue(getFanIntensity());
             if (newTargetDutyValue > getFanDutyCycle()) {
               fanState = FAN_SPEEDING_UP;
               fanTargetDutyValue = newTargetDutyValue;
@@ -284,7 +277,7 @@ void handleStateTransition(Event event) {
           
         case INTENSITY_CHANGED: 
           if (getFanMode() == MODE_CONTINUOUS) {
-            uint8_t newTargetDutyValue = mapToFanDutyValue(getFanIntensity());
+            pwm_duty_t newTargetDutyValue = mapToFanDutyValue(getFanIntensity());
             if (newTargetDutyValue > getFanDutyCycle()) {
               fanState = FAN_SPEEDING_UP;
               fanTargetDutyValue = newTargetDutyValue;

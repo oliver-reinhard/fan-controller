@@ -2,11 +2,17 @@
   #define FAN_UTIL_H_INCLUDED
  
   #include <Arduino.h>
+
+  typedef uint8_t pin_t;
   
-  void configInput(uint8_t pin);
+  typedef uint16_t time16_ms_t;
+  typedef uint32_t time32_ms_t;
+  typedef uint16_t time16_s_t;
   
-  void configInputWithPullup(uint8_t pin);
+  void configInput(pin_t pin);
   
-  void configOutput(uint8_t pin);
+  void configInputWithPullup(pin_t pin);
+  
+  void configOutput(pin_t pin);
   
 #endif

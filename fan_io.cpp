@@ -1,11 +1,10 @@
 #include "fan_io.h"
-#include "fan_util.h"
 
 bool statusLEDState = LOW;
 
-uint32_t lastPauseBlipTime = 0;
+time32_ms_t lastPauseBlipTime = 0;
 
-volatile uint8_t fanDutyCycleValue = 0; // value actually set on output pin
+volatile pwm_duty_t fanDutyCycleValue = 0; // value actually set on output pin
 
 volatile FanMode fanMode = MODE_UNDEF;
 volatile FanIntensity fanIntensity = INTENSITY_UNDEF;
@@ -156,7 +155,7 @@ void configPWM1() {
   #endif
 }
 
-void setFanDutyCycle(uint8_t value) {
+void setFanDutyCycle(pwm_duty_t value) {
   fanDutyCycleValue = value;
   #if defined(__AVR_ATmega328P__)
     analogWrite(FAN_PWM_OUT_PIN, value); // Send PWM signal
@@ -166,8 +165,13 @@ void setFanDutyCycle(uint8_t value) {
   #endif
 }
 
-uint8_t getFanDutyCycle() {
+pwm_duty_t getFanDutyCycle() {
   return fanDutyCycleValue;
+}
+
+bool isPwmActive() {
+  return fanDutyCycleValue != ANALOG_OUT_MIN   // fan off – no PWM required
+  & fanDutyCycleValue != ANALOG_OUT_MAX;       // fan on at maximum – no PWM required
 }
 void setStatusLED(boolean on) {
   statusLEDState = on;
@@ -193,6 +197,6 @@ void resetPauseBlip() {
   lastPauseBlipTime = millis();
 }
   
-uint32_t getLastPauseBlipTime() {
+time32_ms_t getLastPauseBlipTime() {
   return lastPauseBlipTime;
 }

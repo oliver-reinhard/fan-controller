@@ -2,7 +2,7 @@
   #define FAN_IO_H_INCLUDED
 
   #include <Arduino.h> 
-  #include "fan_util.h"
+  #include "io_util.h"
   
   #if defined(__AVR_ATmega328P__)
     #define VERBOSE
@@ -33,8 +33,8 @@
   #endif 
 
   // Fan electrical characteristics:
-  const uint16_t FAN_MAX_VOLTAGE = 13000;                       // [mV]
-  const uint16_t FAN_LOW_THRESHOLD_VOLTAGE = 4400;              // [mV] // below this voltage, the fan will not move
+  const millivolt_t FAN_MAX_VOLTAGE = 13000;                       // [mV]
+  const millivolt_t FAN_LOW_THRESHOLD_VOLTAGE = 4400;              // [mV] // below this voltage, the fan will not move
   
   // --------------------
   // FIXED VALUES -- DO NOT CHANGE (unless you know what you're doing)
@@ -57,8 +57,6 @@
   // Interfaces:
   const time16_ms_t INTERVAL_PAUSE_BLIP_OFF_DURATION_MS = 5000;  // [ms] LED blips during pause: HIGH state
   const time16_ms_t INTERVAL_PAUSE_BLIP_ON_DURATION_MS = 200;    // [ms] LED LOW state
-
-  const time16_ms_t SWITCH_DEBOUNCE_WAIT_MS = 10;
 
   //
   // PWM / Timer1 scaling
@@ -84,6 +82,14 @@
   
   typedef enum {INTENSITY_UNDEF, INTENSITY_LOW, INTENSITY_MEDIUM, INTENSITY_HIGH} FanIntensity;
 
+  typedef enum {NO_INPUT_INTERRUPT, MODE_CHANGED_INTERRUPT, INTENSITY_CHANGED_INTERRUPT} InputInterrupt;
+
+
+  // 
+  // Interrupt handling
+  //
+  void resetInputInterrupt();
+  boolean isInputInterrupt();
   
   //
   // FUNCTIONS
@@ -112,7 +118,5 @@
   void invertStatusLED();
   
   void showPauseBlip();
-  void resetPauseBlip();  // reset time
-  time32_ms_t getLastPauseBlipTime();      // [ms]
 
 #endif

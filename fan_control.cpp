@@ -28,6 +28,35 @@ volatile pwm_duty_t fanTargetDutyValue = FAN_OUT_FAN_OFF; // value derived from 
 volatile time32_ms_t intervalPhaseBeginTime = 0; // [ms]
 volatile time32_ms_t intervalPauseDuration;      // [ms]
 
+time32_ms_t lastPauseBlipTime = 0;
+  
+// (function pointers)
+  extern void (* modeChangedHandler)();
+  extern void (* intensityChangedHandler)();
+
+//
+// Event handlers
+//
+
+void handleModeChange() {
+  handleStateTransition(MODE_CHANGED);
+}
+
+void handleIntensityChange() {
+  handleStateTransition(INTENSITY_CHANGED);
+}
+
+void initFanControl() {
+  // Install input-change handlers (= assign function pointers)
+  modeChangedHandler = handleModeChange;
+  intensityChangedHandler = handleIntensityChange; 
+
+  getFanIntensity(); // ensure initialisation
+  if (getFanMode() != MODE_OFF) {
+    handleStateTransition(MODE_CHANGED);
+  }
+}
+
 //
 // FUNCTIONS
 //
@@ -348,4 +377,12 @@ void handleStateTransition(Event event) {
     Serial.print("] --> State ");
     Serial.println(fanStateName(fanState));
   #endif
+}
+
+void resetPauseBlip() {
+  lastPauseBlipTime = _millis();
+}
+  
+time32_ms_t getLastPauseBlipTime() {
+  return lastPauseBlipTime;
 }

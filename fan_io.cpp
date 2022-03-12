@@ -2,13 +2,19 @@
 
 bool statusLEDState = LOW;
 
-time32_ms_t lastPauseBlipTime = 0;
-
 volatile pwm_duty_t fanDutyCycleValue = 0; // value actually set on output pin
 
 volatile FanMode fanMode = MODE_UNDEF;
 volatile FanIntensity fanIntensity = INTENSITY_UNDEF;
-
+  
+// volatile --> variable can change at any time --> prevents compiler from optimising away a read access that would 
+// return a value changed by an interrupt handler
+volatile InputInterrupt interruptSource = NO_INPUT_INTERRUPT;
+  
+// (function pointers)
+void (* modeChangedHandler)();
+void (* intensityChangedHandler)();
+  
 void configInputPins() {
   configInputWithPullup(MODE_SWITCH_IN_PIN_1);
   configInputWithPullup(MODE_SWITCH_IN_PIN_2);
@@ -90,7 +96,13 @@ FanIntensity getFanIntensity() {
 //
 // INTERRUPTS
 //
-
+  void resetInputInterrupt() {
+    interruptSource = NO_INPUT_INTERRUPT;
+  }
+  boolean isInputInterrupt() {
+    return interruptSource != NO_INPUT_INTERRUPT;
+  }
+  
 void configInt0Interrupt() {
   #if defined(__AVR_ATmega328P__)
     EIMSK |= _BV(INT0);      // Enable INT0 (external interrupt) 
@@ -102,6 +114,12 @@ void configInt0Interrupt() {
   #endif
 }
 
+
+ISR (INT0_vect) {       // Interrupt service routine for INT0 on PB2
+  debounceSwitch();
+  interruptSource = MODE_CHANGED_INTERRUPT;
+  modeChangedHandler();
+}
 
 void configPinChangeInterrupts() {
   // Pin-change interrupts are triggered for each level-change; this cannot be configured
@@ -118,6 +136,22 @@ void configPinChangeInterrupts() {
   #endif
 }
 
+
+ISR (PCINT0_vect) {       // Interrupt service routine for Pin Change Interrupt Request 0
+  debounceSwitch();
+  if (updateFanModeFromInputPins()) {
+    interruptSource = MODE_CHANGED_INTERRUPT;
+    modeChangedHandler();
+  }
+}
+
+ISR (PCINT2_vect) {       // Interrupt service routine for Pin Change Interrupt Request 2
+  debounceSwitch();
+  if (updateFanIntensityFromInputPins()) {
+    interruptSource = INTENSITY_CHANGED_INTERRUPT;
+    intensityChangedHandler();
+  }
+}
 
 void configPWM1() {
   #if defined(__AVR_ATmega328P__)
@@ -187,16 +221,7 @@ void invertStatusLED() {
 }
 
 void showPauseBlip() {
-  resetPauseBlip();
   setStatusLED(HIGH);
   delay(INTERVAL_PAUSE_BLIP_ON_DURATION_MS);
   setStatusLED(LOW);
-}
-
-void resetPauseBlip() {
-  lastPauseBlipTime = millis();
-}
-  
-time32_ms_t getLastPauseBlipTime() {
-  return lastPauseBlipTime;
 }

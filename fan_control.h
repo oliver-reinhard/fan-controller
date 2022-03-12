@@ -2,7 +2,7 @@
   #define FAN_CONTROL_H_INCLUDED
   
   #include <Arduino.h> 
-  #include "fan_util.h"
+  #include "io_util.h"
   #include "fan_io.h"
   
   // --------------------
@@ -13,15 +13,15 @@
   // --------------------
 
   // Continuous operation:
-  const uint16_t FAN_CONTINUOUS_LOW_VOLTAGE = 4400;             // [mV] do not set lower than FAN_LOW_THRESHOLD_VOLTAGE
-  const uint16_t FAN_CONTINUOUS_MEDIUM_VOLTAGE = 9000;          // [mV]
-  const uint16_t FAN_CONTINUOUS_HIGH_VOLTAGE = FAN_MAX_VOLTAGE; // [mV]
+  const millivolt_t FAN_CONTINUOUS_LOW_VOLTAGE = 4400;             // [mV] do not set lower than FAN_LOW_THRESHOLD_VOLTAGE
+  const millivolt_t FAN_CONTINUOUS_MEDIUM_VOLTAGE = 9000;          // [mV]
+  const millivolt_t FAN_CONTINUOUS_HIGH_VOLTAGE = FAN_MAX_VOLTAGE; // [mV]
   
   // Interval operation:
-  const uint16_t INTERVAL_FAN_ON_VOLTAGE = FAN_MAX_VOLTAGE;     // [mV]
+  const millivolt_t INTERVAL_FAN_ON_VOLTAGE = FAN_MAX_VOLTAGE;     // [mV]
   
-  const time16_s_t INTERVAL_FAN_ON_DURATION = 10;                 // [s]
-  const time16_s_t INTERVAL_PAUSE_SHORT_DURATION = 10;            // [s]
+  const time16_s_t INTERVAL_FAN_ON_DURATION = 15;                 // [s]
+  const time16_s_t INTERVAL_PAUSE_SHORT_DURATION = 15;            // [s]
   const time16_s_t INTERVAL_PAUSE_MEDIUM_DURATION = 20;           // [s]
   const time16_s_t INTERVAL_PAUSE_LONG_DURATION = 30;             // [s]
   
@@ -40,7 +40,8 @@
   typedef enum  {FAN_OFF, FAN_SPEEDING_UP, FAN_STEADY, FAN_SLOWING_DOWN, FAN_PAUSING} FanState;
   
   typedef enum  {EVENT_NONE, MODE_CHANGED, INTENSITY_CHANGED, TARGET_SPEED_REACHED, INTERVAL_PHASE_ENDED} Event;
-  
+
+  void initFanControl();
   
   //
   // FUNCTIONS
@@ -54,5 +55,8 @@
 
   time32_ms_t getIntervalPhaseBeginTime(); // [ms]
   time32_ms_t getIntervalPauseDuration();  // [ms]
+  
+  void resetPauseBlip();  // reset time
+  time32_ms_t getLastPauseBlipTime();      // [ms]
 
 #endif

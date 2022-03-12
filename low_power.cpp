@@ -62,8 +62,8 @@ watchdog_timeout_t mapToTimeout(time32_ms_t duration);
 // returns true if interrupted
 boolean interruptibleDelay(time32_ms_t duration) { 
   time32_ms_t endAt = _millis() + duration;
-  int32_t remaining = duration;  // allow this to be negative!
-  interruptCause = EVENT_NONE;
+  duration32_ms_t remaining = duration;  // allow this to be negative!
+  resetInputInterrupt();
   do {
   Serial.print("delay: ");
     Serial.print(remaining);
@@ -71,7 +71,7 @@ boolean interruptibleDelay(time32_ms_t duration) {
     Serial.println(_millis());
     enterSleep(mapToTimeout(remaining));
 //    invertStatusLED();
-    if (interruptCause != EVENT_NONE) {
+    if (isInputInterrupt()) {
       return true;
     } 
     remaining = endAt - _millis();

@@ -1,8 +1,6 @@
 #define F_CPU 1000000UL                  // Defaults to 1 MHz
 //#define F_CPU 128000UL                  // Defaults to 1 MHz
 
-//#include <util/delay.h>
-  
 #include "fan_io.h"
 #include "fan_control.h"
 #include "low_power.h"
@@ -12,11 +10,6 @@
 //
 
 const time32_ms_t INTERVAL_FAN_ON_DURATION_MS = (time32_ms_t) INTERVAL_FAN_ON_DURATION * 1000; // [ms]
-
-// volatile --> variable can change at any time --> prevents compiler from optimising away a read access that would 
-// return a value changed by an interrupt handler
-volatile Event interruptCause = EVENT_NONE;
-
 
 //
 // SETUP
@@ -28,9 +21,12 @@ void setup() {
   
   //  configInt0Interrupt(); // triggered by PD2 (mode switch)
   configPinChangeInterrupts();
+  
   sei();
   configPWM1();
   configLowPower();
+  
+  initFanControl();
 
   #ifdef VERBOSE
     // Setup Serial Monitor
@@ -46,10 +42,7 @@ void setup() {
   #endif
   
   setStatusLED(LOW);
-  getFanIntensity(); // ensure initialisation
-  if (getFanMode() != MODE_OFF) {
-    handleStateTransition(MODE_CHANGED);
-  }
+  flashLED(STATUS_LED_OUT_PIN,5);
 }
 
 
@@ -73,9 +66,13 @@ void loop() {
     case FAN_STEADY:
       if (getFanMode() == MODE_INTERVAL) {
         // sleep until active phase is over
-        int32_t remaingingPhaseDuration = INTERVAL_FAN_ON_DURATION_MS - (now - getIntervalPhaseBeginTime());  // can be < 0
+        duration32_ms_t remaingingPhaseDuration = INTERVAL_FAN_ON_DURATION_MS - (now - getIntervalPhaseBeginTime());  // can be < 0
   Serial.print("remaingingPhaseDuration: ");
-    Serial.println(remaingingPhaseDuration);
+    Serial.print(remaingingPhaseDuration);
+  Serial.print(", now: ");
+    Serial.print(now);
+  Serial.print(", getIntervalPhaseBeginTime: ");
+    Serial.println(getIntervalPhaseBeginTime());
         if (remaingingPhaseDuration > 0) {
           interruptibleDelay(remaingingPhaseDuration);
         } else {
@@ -93,9 +90,19 @@ void loop() {
       
     case FAN_PAUSING:
       // sleep until next LED flash or until pause is over (whatever will happen first)
-      int32_t remaingingPhaseDuration = getIntervalPauseDuration() - (now - getIntervalPhaseBeginTime());
+      duration32_ms_t remaingingPhaseDuration = getIntervalPauseDuration() - (now - getIntervalPhaseBeginTime());  // can be < 0
+    Serial.print("remaingingPhaseDuration: ");
+    Serial.print(remaingingPhaseDuration);
+  Serial.print(", now: ");
+    Serial.print(now);
+  Serial.print(", getIntervalPhaseBeginTime: ");
+    Serial.println(getIntervalPhaseBeginTime());
       if (remaingingPhaseDuration > 0) {
-        int32_t remaingingBlipDelay = INTERVAL_PAUSE_BLIP_OFF_DURATION_MS - (now - getLastPauseBlipTime());
+        duration32_ms_t remaingingBlipDelay = INTERVAL_PAUSE_BLIP_OFF_DURATION_MS - (now - getLastPauseBlipTime());  // can be < 0
+         Serial.print(", remaingingBlipDelay: ");
+    Serial.print(remaingingBlipDelay);
+  Serial.print(", getLastPauseBlipTime: ");
+    Serial.println(getLastPauseBlipTime());
         if (remaingingBlipDelay < 0) {
           remaingingBlipDelay = 0;
         }
@@ -104,6 +111,7 @@ void loop() {
         } else {
           if( ! interruptibleDelay(remaingingBlipDelay)) {
             showPauseBlip();
+            resetPauseBlip();
           }
         }
       } else {
@@ -111,34 +119,4 @@ void loop() {
       }
       break;
   }
-}
-
-void handleModeChange() {
-  if (updateFanModeFromInputPins()) {
-    interruptCause = MODE_CHANGED;
-    handleStateTransition(MODE_CHANGED);
-  }
-}
-
-
-ISR (INT0_vect) {       // Interrupt service routine for INT0 on PB2
-  debounceSwitch();
-  handleModeChange();
-}
-
-ISR (PCINT0_vect) {       // Interrupt service routine for Pin Change Interrupt Request 0
-  debounceSwitch();
-  handleModeChange();
-}
-
-ISR (PCINT2_vect) {       // Interrupt service routine for Pin Change Interrupt Request 2
-  debounceSwitch();
-  if (updateFanIntensityFromInputPins()) {
-    interruptCause = INTENSITY_CHANGED;
-    handleStateTransition(INTENSITY_CHANGED);
-  }
-}
-
-static inline void debounceSwitch() {
-  delay(SWITCH_DEBOUNCE_WAIT_MS);
 }

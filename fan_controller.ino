@@ -40,16 +40,13 @@ void setup() {
   #else
     #define USART0_SERIAL USART0_OFF
   #endif
-  
-  setStatusLED(LOW);
-  flashLED(STATUS_LED_OUT_PIN,5);
 }
 
 
 void loop() {
-  time32_ms_t now = _millis();
-//  Serial.print("loop: _millis: ");
-//    Serial.println(now);
+  time32_ms_t now = sleeplessMillis();
+  Serial.print("loop: sleeplessMillis: ");
+    Serial.println(now);
 
   switch(getFanState()) {
     case FAN_OFF:
@@ -58,7 +55,7 @@ void loop() {
       
     case FAN_SPEEDING_UP:
       // When transistioning from OFF or STEADY, duty value is set to minimum -> let fab speed up to this first -> delay first
-      if (! interruptibleDelay(SPEED_TRANSITION_CYCLE_DURATION_MS)) {
+      if (! delayInterruptible(SPEED_TRANSITION_CYCLE_DURATION_MS)) {
         speedUp();
       }
       break;
@@ -74,7 +71,7 @@ void loop() {
   Serial.print(", getIntervalPhaseBeginTime: ");
     Serial.println(getIntervalPhaseBeginTime());
         if (remaingingPhaseDuration > 0) {
-          interruptibleDelay(remaingingPhaseDuration);
+          delayInterruptible(remaingingPhaseDuration);
         } else {
           handleStateTransition(INTERVAL_PHASE_ENDED);
         }
@@ -85,7 +82,7 @@ void loop() {
       
     case FAN_SLOWING_DOWN:
       slowDown();
-      interruptibleDelay(SPEED_TRANSITION_CYCLE_DURATION_MS);
+      delayInterruptible(SPEED_TRANSITION_CYCLE_DURATION_MS);
       break;
       
     case FAN_PAUSING:
@@ -99,7 +96,7 @@ void loop() {
     Serial.println(getIntervalPhaseBeginTime());
       if (remaingingPhaseDuration > 0) {
         duration32_ms_t remaingingBlipDelay = INTERVAL_PAUSE_BLIP_OFF_DURATION_MS - (now - getLastPauseBlipTime());  // can be < 0
-         Serial.print(", remaingingBlipDelay: ");
+         Serial.print("remaingingBlipDelay: ");
     Serial.print(remaingingBlipDelay);
   Serial.print(", getLastPauseBlipTime: ");
     Serial.println(getLastPauseBlipTime());
@@ -107,9 +104,9 @@ void loop() {
           remaingingBlipDelay = 0;
         }
         if (remaingingPhaseDuration <= remaingingBlipDelay) {
-          interruptibleDelay(remaingingPhaseDuration);
+          delayInterruptible(remaingingPhaseDuration);
         } else {
-          if( ! interruptibleDelay(remaingingBlipDelay)) {
+          if( ! delayInterruptible(remaingingBlipDelay)) {
             showPauseBlip();
             resetPauseBlip();
           }

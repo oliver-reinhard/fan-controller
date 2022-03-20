@@ -207,7 +207,7 @@ void handleStateTransition(Event event) {
   if (event == EVENT_NONE) {
     return;
   }
-  time32_ms_t now = _millis();
+  time32_ms_t now = sleeplessMillis();
   FanState beforeState = fanState;
   
   switch(fanState) {
@@ -380,7 +380,7 @@ void handleStateTransition(Event event) {
 }
 
 void resetPauseBlip() {
-  lastPauseBlipTime = _millis();
+  lastPauseBlipTime = sleeplessMillis();
 }
   
 time32_ms_t getLastPauseBlipTime() {

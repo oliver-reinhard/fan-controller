@@ -6,8 +6,9 @@
 
   void configLowPower();
 
-  time32_ms_t _millis();
-  boolean interruptibleDelay(time32_ms_t duration);
+  time32_ms_t sleeplessMillis();
+  
+  boolean delayInterruptible(time32_ms_t duration);
   void waitForInterrupt();
   
 #endif

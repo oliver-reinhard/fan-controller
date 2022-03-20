@@ -10,11 +10,7 @@ volatile FanIntensity fanIntensity = INTENSITY_UNDEF;
 // volatile --> variable can change at any time --> prevents compiler from optimising away a read access that would 
 // return a value changed by an interrupt handler
 volatile InputInterrupt interruptSource = NO_INPUT_INTERRUPT;
-  
-// (function pointers)
-void (* modeChangedHandler)();
-void (* intensityChangedHandler)();
-  
+ 
 void configInputPins() {
   configInputWithPullup(MODE_SWITCH_IN_PIN_1);
   configInputWithPullup(MODE_SWITCH_IN_PIN_2);
@@ -96,12 +92,19 @@ FanIntensity getFanIntensity() {
 //
 // INTERRUPTS
 //
-  void resetInputInterrupt() {
-    interruptSource = NO_INPUT_INTERRUPT;
-  }
-  boolean isInputInterrupt() {
-    return interruptSource != NO_INPUT_INTERRUPT;
-  }
+void resetInputInterrupt() {
+  interruptSource = NO_INPUT_INTERRUPT;
+}
+boolean isInputInterrupt() {
+  return interruptSource != NO_INPUT_INTERRUPT;
+} 
+
+// 
+// Event handlers (function pointers)
+//
+void (* modeChangedHandler)();
+void (* intensityChangedHandler)();
+  
   
 void configInt0Interrupt() {
   #if defined(__AVR_ATmega328P__)
@@ -205,7 +208,7 @@ pwm_duty_t getFanDutyCycle() {
 
 bool isPwmActive() {
   return fanDutyCycleValue != ANALOG_OUT_MIN   // fan off – no PWM required
-  & fanDutyCycleValue != ANALOG_OUT_MAX;       // fan on at maximum – no PWM required
+      && fanDutyCycleValue != ANALOG_OUT_MAX;       // fan on at maximum – no PWM required
 }
 void setStatusLED(boolean on) {
   statusLEDState = on;

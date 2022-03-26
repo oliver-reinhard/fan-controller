@@ -20,18 +20,18 @@
   // Interval operation:
   const millivolt_t INTERVAL_FAN_ON_VOLTAGE = FAN_MAX_VOLTAGE;     // [mV]
   
-  const time16_s_t INTERVAL_FAN_ON_DURATION = 15;                 // [s]
-  const time16_s_t INTERVAL_PAUSE_SHORT_DURATION = 15;            // [s]
-  const time16_s_t INTERVAL_PAUSE_MEDIUM_DURATION = 20;           // [s]
-  const time16_s_t INTERVAL_PAUSE_LONG_DURATION = 30;             // [s]
+  const duration16_s_t INTERVAL_FAN_ON_DURATION = 15;                 // [s]
+  const duration16_s_t INTERVAL_PAUSE_SHORT_DURATION = 15;            // [s]
+  const duration16_s_t INTERVAL_PAUSE_MEDIUM_DURATION = 20;           // [s]
+  const duration16_s_t INTERVAL_PAUSE_LONG_DURATION = 30;             // [s]
   
   // Fan soft start and stop:
-  const time16_ms_t FAN_START_DURATION_MS = 2000;                  // [ms] duration from full stop to full throttle
-  const time16_ms_t FAN_STOP_DURATION_MS = 1000;                   // [ms] duration from full throttle to full stop
+  const duration16_ms_t FAN_START_DURATION_MS = 2000;                  // [ms] duration from full stop to full throttle
+  const duration16_ms_t FAN_STOP_DURATION_MS = 1000;                   // [ms] duration from full throttle to full stop
   const boolean  BLINK_LED_DURING_SPEED_TRANSITION = true;
   
   // Control cycle: PWM parameters are set only once per cycle
-  const time32_ms_t SPEED_TRANSITION_CYCLE_DURATION_MS = 200;      // [ms]
+  const duration16_ms_t SPEED_TRANSITION_CYCLE_DURATION_MS = 200;      // [ms]
   
   
   //
@@ -53,10 +53,10 @@
   void speedUp();
   void slowDown();
 
-  time32_ms_t getIntervalPhaseBeginTime(); // [ms]
-  time32_ms_t getIntervalPauseDuration();  // [ms]
+  time32_s_t getIntervalPhaseBeginTime(); // [s]
+  time32_s_t getIntervalPauseDuration();  // [s]
   
   void resetPauseBlip();  // reset time
-  time32_ms_t getLastPauseBlipTime();      // [ms]
+  time32_s_t getLastPauseBlipTime();      // [s]
 
 #endif

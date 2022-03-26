@@ -5,10 +5,9 @@
   #include "io_util.h"
 
   void configLowPower();
-
-  time32_ms_t sleeplessMillis();
   
-  boolean delayInterruptible(time32_ms_t duration);
-  void waitForInterrupt();
+  boolean delayInterruptible(time16_ms_t duration);
+  
+  void waitForUserInput();
   
 #endif

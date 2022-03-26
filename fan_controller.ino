@@ -2,14 +2,13 @@
 //#define F_CPU 128000UL                  // Defaults to 1 MHz
 
 #include "fan_io.h"
-#include "fan_control.h"
 #include "low_power.h"
+#include "time.h"
+#include "fan_control.h"
 
 //
 //  #define VERBOSE --> see fan_io.h
 //
-
-const time32_ms_t INTERVAL_FAN_ON_DURATION_MS = (time32_ms_t) INTERVAL_FAN_ON_DURATION * 1000; // [ms]
 
 //
 // SETUP
@@ -25,6 +24,7 @@ void setup() {
   sei();
   configPWM1();
   configLowPower();
+  configTime();
   
   initFanControl();
 
@@ -44,13 +44,13 @@ void setup() {
 
 
 void loop() {
-  time32_ms_t now = sleeplessMillis();
-  Serial.print("loop: sleeplessMillis: ");
+  time32_s_t now = _time_s();
+  Serial.print("loop: time : ");
     Serial.println(now);
 
   switch(getFanState()) {
     case FAN_OFF:
-      waitForInterrupt();  // blocking wait
+      waitForUserInput();  // blocking wait
       break;
       
     case FAN_SPEEDING_UP:
@@ -63,20 +63,20 @@ void loop() {
     case FAN_STEADY:
       if (getFanMode() == MODE_INTERVAL) {
         // sleep until active phase is over
-        duration32_ms_t remaingingPhaseDuration = INTERVAL_FAN_ON_DURATION_MS - (now - getIntervalPhaseBeginTime());  // can be < 0
-  Serial.print("remaingingPhaseDuration: ");
-    Serial.print(remaingingPhaseDuration);
+        duration16_s_t remainingPhaseDuration = INTERVAL_FAN_ON_DURATION - (now - getIntervalPhaseBeginTime());  // can be < 0
+  Serial.print("remainingPhaseDuration: ");
+    Serial.print(remainingPhaseDuration);
   Serial.print(", now: ");
     Serial.print(now);
   Serial.print(", getIntervalPhaseBeginTime: ");
     Serial.println(getIntervalPhaseBeginTime());
-        if (remaingingPhaseDuration > 0) {
-          delayInterruptible(remaingingPhaseDuration);
+        if (remainingPhaseDuration > 0) {
+          delayInterruptible(remainingPhaseDuration);
         } else {
           handleStateTransition(INTERVAL_PHASE_ENDED);
         }
       } else {
-        waitForInterrupt();
+        waitForUserInput();
       }
       break;
       
@@ -87,15 +87,15 @@ void loop() {
       
     case FAN_PAUSING:
       // sleep until next LED flash or until pause is over (whatever will happen first)
-      duration32_ms_t remaingingPhaseDuration = getIntervalPauseDuration() - (now - getIntervalPhaseBeginTime());  // can be < 0
-    Serial.print("remaingingPhaseDuration: ");
-    Serial.print(remaingingPhaseDuration);
+      duration16_s_t remainingPhaseDuration = getIntervalPauseDuration() - (now - getIntervalPhaseBeginTime());  // can be < 0
+    Serial.print("remainingPhaseDuration: ");
+    Serial.print(remainingPhaseDuration);
   Serial.print(", now: ");
     Serial.print(now);
   Serial.print(", getIntervalPhaseBeginTime: ");
     Serial.println(getIntervalPhaseBeginTime());
-      if (remaingingPhaseDuration > 0) {
-        duration32_ms_t remaingingBlipDelay = INTERVAL_PAUSE_BLIP_OFF_DURATION_MS - (now - getLastPauseBlipTime());  // can be < 0
+      if (remainingPhaseDuration > 0) {
+        duration16_s_t remaingingBlipDelay = INTERVAL_PAUSE_BLIP_OFF_DURATION_MS - (now - getLastPauseBlipTime());  // can be < 0
          Serial.print("remaingingBlipDelay: ");
     Serial.print(remaingingBlipDelay);
   Serial.print(", getLastPauseBlipTime: ");
@@ -103,8 +103,8 @@ void loop() {
         if (remaingingBlipDelay < 0) {
           remaingingBlipDelay = 0;
         }
-        if (remaingingPhaseDuration <= remaingingBlipDelay) {
-          delayInterruptible(remaingingPhaseDuration);
+        if (remainingPhaseDuration <= remaingingBlipDelay) {
+          delayInterruptible(remainingPhaseDuration);
         } else {
           if( ! delayInterruptible(remaingingBlipDelay)) {
             showPauseBlip();

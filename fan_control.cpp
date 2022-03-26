@@ -1,5 +1,6 @@
 #include "fan_control.h"
 #include "low_power.h"
+#include "time.h"
 
 //
 // ANALOG OUT
@@ -25,14 +26,14 @@ volatile FanState fanState = FAN_OFF;          // current fan state
   
 volatile pwm_duty_t fanTargetDutyValue = FAN_OUT_FAN_OFF; // value derived from input-pin values
 
-volatile time32_ms_t intervalPhaseBeginTime = 0; // [ms]
-volatile time32_ms_t intervalPauseDuration;      // [ms]
+volatile time32_s_t intervalPhaseBeginTime = 0; // [s]
+volatile time32_s_t intervalPauseDuration;      // [s]
 
 time32_ms_t lastPauseBlipTime = 0;
   
 // (function pointers)
-  extern void (* modeChangedHandler)();
-  extern void (* intensityChangedHandler)();
+extern void (* modeChangedHandler)();
+extern void (* intensityChangedHandler)();
 
 //
 // Event handlers
@@ -88,15 +89,15 @@ pwm_duty_t mapToFanDutyValue(FanIntensity intensity) {
 }
 
 // Applicable only in mode INTERVAL
-// Returns [ms]
-time32_ms_t mapToIntervalPauseDuration(FanIntensity intensity) {
+// Returns [s]
+time16_s_t mapToIntervalPauseDuration(FanIntensity intensity) {
   switch(intensity) {
     case INTENSITY_HIGH: 
-      return (time32_ms_t) INTERVAL_PAUSE_SHORT_DURATION * 1000; // [ms]
+      return INTERVAL_PAUSE_SHORT_DURATION; // [s]
     case INTENSITY_MEDIUM: 
-      return (time32_ms_t) INTERVAL_PAUSE_MEDIUM_DURATION * 1000; // [ms]
+      return INTERVAL_PAUSE_MEDIUM_DURATION; // [s]
     default: 
-      return (time32_ms_t) INTERVAL_PAUSE_LONG_DURATION * 1000; // [ms]
+      return INTERVAL_PAUSE_LONG_DURATION; // [s]
   }
 }
   
@@ -207,7 +208,7 @@ void handleStateTransition(Event event) {
   if (event == EVENT_NONE) {
     return;
   }
-  time32_ms_t now = sleeplessMillis();
+  time32_s_t now = _time_s();
   FanState beforeState = fanState;
   
   switch(fanState) {
@@ -380,7 +381,7 @@ void handleStateTransition(Event event) {
 }
 
 void resetPauseBlip() {
-  lastPauseBlipTime = sleeplessMillis();
+  lastPauseBlipTime = _time_s();
 }
   
 time32_ms_t getLastPauseBlipTime() {

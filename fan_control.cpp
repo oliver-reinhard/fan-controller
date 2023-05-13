@@ -144,7 +144,7 @@ void fanOff(FanMode mode) {
      intervalPauseDuration = mapToIntervalPauseDuration(getFanIntensity());
   }
   configInput(FAN_POWER_ON_OUT_PIN);
-  configInput(FAN_PWM_OUT_PIN);
+  // configInput(FAN_PWM_OUT_PIN);
 }
 
 

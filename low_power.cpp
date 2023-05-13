@@ -19,8 +19,8 @@
     power_twi_disable();
     
 //    power_timer0_disable(); // cannot disable, required for millis() function
-    power_timer1_disable();
-//    power_timer2_disable(); // cannot disable, required for PWM output
+    // power_timer1_disable(); // cannot disable, required for PWM output on Pin 10
+   power_timer2_disable(); 
   }
 
 #elif defined(__AVR_ATtiny85__)

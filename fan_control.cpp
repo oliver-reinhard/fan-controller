@@ -1,3 +1,4 @@
+#include "HardwareSerial.h"
 #include "fan_control.h"
 #include "low_power.h"
 #include "wdt_time.h"
@@ -144,7 +145,7 @@ void fanOff(FanMode mode) {
      intervalPauseDuration = mapToIntervalPauseDuration(getFanIntensity());
   }
   configInput(FAN_POWER_ON_OUT_PIN);
-  // configInput(FAN_PWM_OUT_PIN);
+  configInput(FAN_PWM_OUT_PIN);
 }
 
 
@@ -162,6 +163,7 @@ void speedUp() {
   #ifdef VERBOSE
     Serial.print("Speeding up: ");
     Serial.println(transitioningDutyValue);
+    Serial.flush();
   #endif
   
   setFanDutyCycle(transitioningDutyValue);
@@ -191,6 +193,7 @@ void slowDown() {
   #ifdef VERBOSE
     Serial.print("Slowing down: ");
     Serial.println(transitioningDutyValue);
+    Serial.flush();
   #endif
   
   setFanDutyCycle(transitioningDutyValue);

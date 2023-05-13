@@ -30,12 +30,12 @@ boolean updateFanModeFromInputPins() {
   uint8_t p1 = digitalRead(MODE_SWITCH_IN_PIN_1);
   uint8_t p2 = digitalRead(MODE_SWITCH_IN_PIN_2);
   FanMode value;
-  if (! p1 && p2) {
-    value = MODE_INTERVAL;
-  } else if(p1 && ! p2) {
+  if (p1) {
+    value = MODE_OFF;
+  } else if(p2) {
     value = MODE_CONTINUOUS;
   } else {
-    value = MODE_OFF;
+    value = MODE_INTERVAL;
   }
   #ifdef VERBOSE
     Serial.print("Read Fan Mode: ");

@@ -11,9 +11,9 @@
   typedef uint8_t pwm_duty_t;
   
   #if defined(__AVR_ATmega328P__)
-    const pin_t MODE_SWITCH_IN_PIN_1 = 8;         // PB0 - digital: PB0==LOW  && PB1==HIGH  --> INTERVAL
+    const pin_t MODE_SWITCH_IN_PIN_1 = 8;         // PB0 - digital: PB0==HIGH               --> OFF (--> port configured as pull-up)
     const pin_t MODE_SWITCH_IN_PIN_2 = 9;         // PB1 - digital: PB0==HIGH && PB1==LOW   --> CONTINUOUS
-                                                  //                PB0==HIGH && PB1==HIGH  --> OFF
+                                                  // PB0 - digital: PB0==HIGH && PB1==HIGH  --> INTERVAL
     const pin_t INTENSITY_SWITCH_IN_PIN_1 = 6;    // PD6 - digital: PD6==LOW  && PD7==HIGH  --> LOW INTENSITY
     const pin_t INTENSITY_SWITCH_IN_PIN_2 = 7;    // PD7 - digital: PD6==HIGH && PD7==LOW   --> HIGH INTENSITY
                                                   //                PD6==HIGH && PD7==HIGH  --> MEDIUM INTENSITY

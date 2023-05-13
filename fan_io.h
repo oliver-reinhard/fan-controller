@@ -11,7 +11,7 @@
   typedef uint8_t pwm_duty_t;
   
   #if defined(__AVR_ATmega328P__)
-    const pin_t MODE_SWITCH_IN_PIN_1 = 8;         // PB0 - digital: PB0==HIGH               --> OFF (--> port configured as pull-up)
+    const pin_t MODE_SWITCH_IN_PIN_1 = 8;         // PB0 - digital: PB0==HIGH               --> OFF (HIGH --> port configured as pull-up)
     const pin_t MODE_SWITCH_IN_PIN_2 = 9;         // PB1 - digital: PB0==HIGH && PB1==LOW   --> CONTINUOUS
                                                   // PB0 - digital: PB0==HIGH && PB1==HIGH  --> INTERVAL
     const pin_t INTENSITY_SWITCH_IN_PIN_1 = 6;    // PD6 - digital: PD6==LOW  && PD7==HIGH  --> LOW INTENSITY
@@ -23,13 +23,14 @@
     const pin_t SLEEP_LED_OUT_PIN = 4;            // PD4 - digital out; on while MCU is in sleep mode 
   
   #elif defined(__AVR_ATtiny85__)
-    const pin_t MODE_SWITCH_IN_PIN = PB2;         // digital: LOW --> CONTINOUS, HIGH --> INTERVAL
-    const pin_t INTENSITY_SWITCH_IN_PIN_1 = PB3;  // digital: PB3==LOW && PB4==HIGH --> LOW INTENSITY, BOTH=LOW --> MEDIUM
-    const pin_t INTENSITY_SWITCH_IN_PIN_2 = PB4;  // digital: PB3==HIGH && PB4==LOW --> HIGH INTENSITY
+    const pin_t MODE_SWITCH_IN_PIN = PB0;         // digital: LOW --> CONTINOUS, HIGH --> INTERVAL (HIGH --> port configured as pull-up)
+    const pin_t INTENSITY_SWITCH_IN_PIN_1 = PB4;  // digital: PB4==LOW  && PB3==HIGH  --> LOW INTENSITY
+    const pin_t INTENSITY_SWITCH_IN_PIN_2 = PB3;  // digital: PB4==HIGH && PB3==LOW   --> HIGH INTENSITY
+                                                  //          PD4==HIGH && PD3==HIGH  --> MEDIUM INTENSITY
     
-    const pin_t FAN_POWER_ON_OUT_PIN = PB5;          // Fan power: MOSFET on/off (some fans don't stop at PWM duty cycle = 0%)
+    const pin_t FAN_POWER_ON_OUT_PIN = PB5;       // Fan power: MOSFET on/off (some fans don't stop at PWM duty cycle = 0%)
     const pin_t FAN_PWM_OUT_PIN = PB1;            // PWM signal @ 25 kHz
-    const pin_t STATUS_LED_OUT_PIN = PB0;         // digital out; blinks shortly in long intervals when fan is in interval mode
+    const pin_t STATUS_LED_OUT_PIN = PB2;         // digital out; blinks shortly in long intervals when fan is in interval mode
   #endif 
 
   // Fan electrical characteristics:
@@ -38,6 +39,24 @@
   
   // --------------------
   // FIXED VALUES -- DO NOT CHANGE (unless you know what you're doing)
+
+  //
+  // PWM / Timer1 scaling
+  //
+  #if defined(__AVR_ATtiny85__)
+    #if (F_CPU == 1000000UL)
+      // PWM frequency = 1 MHz / 1 / 40 = 25 kHz 
+      const uint8_t TIMER1_PRESCALER = 1;     // divide by 1
+      const uint8_t TIMER1_COUNT_TO = 40;     // count to 40
+    #elif #if (F_CPU == 128000UL)
+      // PWM frequency = 128 kHz / 1 / 5 = 25.6 kHz 
+      const uint8_t TIMER1_PRESCALER = 1;     // divide by 1
+      const uint8_t TIMER1_COUNT_TO = 5;      // count to 5
+    #else
+      #error("F_CPU is undefined or its value is unknown")
+    #endif
+  #endif
+  
   // --------------------
   
   //
@@ -59,23 +78,6 @@
   const time16_ms_t INTERVAL_PAUSE_BLIP_ON_DURATION_MS = 200;    // [ms] LED LOW state
 
   //
-  // PWM / Timer1 scaling
-  //
-  #if defined(__AVR_ATtiny85__)
-    #if (F_CPU == 1000000UL)
-      // PWM frequency = 1 MHz / 1 / 40 = 25 kHz 
-      const uint8_t TIMER1_PRESCALER = 1;     // divide by 1
-      const uint8_t TIMER1_COUNT_TO = 40;     // count to 40
-    #elif #if (F_CPU == 128000UL)
-      // PWM frequency = 128 kHz / 1 / 5 = 25.6 kHz 
-      const uint8_t TIMER1_PRESCALER = 1;     // divide by 1
-      const uint8_t TIMER1_COUNT_TO = 5;      // count to 5
-    #else
-      #error("F_CPU is undefined or its value is unknown")
-    #endif
-  #endif
-  
-  //
   // INPUTS
   //
   typedef enum {MODE_UNDEF, MODE_OFF, MODE_CONTINUOUS, MODE_INTERVAL} FanMode;
@@ -89,7 +91,7 @@
   // Interrupt handling
   //
   void resetInputInterrupt();
-  boolean isInputInterrupt();
+  bool isInputInterrupt();
   
   //
   // FUNCTIONS
@@ -101,20 +103,20 @@
   void configPWM1();
   
   // Returns true if value changed
-  boolean updateFanModeFromInputPins();
+  bool updateFanModeFromInputPins();
   FanMode getFanMode();
   
   // Returns true if value changed
-  boolean updateFanIntensityFromInputPins();
+  bool updateFanIntensityFromInputPins();
   FanIntensity getFanIntensity();
 
   
-  void setFanPower(boolean on);
+  void setFanPower(bool on);
   void setFanDutyCycle(pwm_duty_t value);
   pwm_duty_t getFanDutyCycle();
-  boolean isPwmActive();
+  bool isPwmActive();
   
-  void setStatusLED(boolean on);
+  void setStatusLED(bool on);
   void invertStatusLED();
   
   void showPauseBlip();

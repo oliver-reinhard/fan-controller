@@ -1,4 +1,4 @@
-#include <wiring.c>
+// #include <wiring.c>
 #include <avr/sleep.h>
 #include <avr/power.h>
 #include <avr/interrupt.h>
@@ -51,12 +51,12 @@ void enterSleep();
  * 
  * returns true if interrupted (i.e. cut short) or false, if not interrupted
  */
-boolean delayInterruptible_millis(time16_ms_t duration) {
+bool delayInterruptible_millis(time16_ms_t duration) {
   delay(duration);
   return false;
 }
 
-boolean delayInterruptible_seconds(time16_s_t duration) { 
+bool delayInterruptible_seconds(time16_s_t duration) { 
   time32_s_t now = wdtTime_s();
   time32_s_t delayUntil = now + duration;
   while (now < delayUntil) {
@@ -86,8 +86,10 @@ void waitForUserInput() {
 }
 
 
-void enterSleep() {    
-  digitalWrite(SLEEP_LED_OUT_PIN, HIGH);
+void enterSleep() {
+  #if defined(__AVR_ATmega328P__)
+    digitalWrite(SLEEP_LED_OUT_PIN, HIGH);
+  #endif
   
   cli();
   
@@ -106,7 +108,9 @@ void enterSleep() {
 //  if (sleeplessMillis() - start < 50) {
 //    delay(50); // wait so we have a flashing LED on rapid short sleeps
 //  }
-  digitalWrite(SLEEP_LED_OUT_PIN, LOW);
+  #if defined(__AVR_ATmega328P__)
+    digitalWrite(SLEEP_LED_OUT_PIN, LOW);
+  #endif
 //  delay(50); // wait so we have a flashing LED on rapidly successive sleeps
 }
 

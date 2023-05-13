@@ -1,5 +1,6 @@
 #include <avr/wdt.h>
 #include <avr/power.h>
+#include <avr/interrupt.h>
 
 #include "wdt_time.h"
 
@@ -47,16 +48,22 @@ time32_s_t wdtTime_s() {
 
   
 void enableArduinoTimer0() {
-  #if defined(__AVR_ATtiny85__)
     TCNT0   = 0;
+  #if defined(__AVR_ATmega328P__)
     TIMSK0 |= _BV(TOIE0);             // Enable overflow interrupt
+
+  #elif defined(__AVR_ATtiny85__)
+    TIMSK |= _BV(TOIE0);             // Enable overflow interrupt
   #endif
   power_timer0_enable();
 }
 
 void disableArduinoTimer0() {
-  #if defined(__AVR_ATtiny85__)
+  #if defined(__AVR_ATmega328P__)
     TIMSK0 &= ~ _BV(TOIE0);           // Disable overflow interrupt
+
+  #elif defined(__AVR_ATtiny85__)
+    TIMSK |= _BV(TOIE0);             // Enable overflow interrupt
   #endif
   power_timer0_disable();
 }

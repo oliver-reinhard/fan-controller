@@ -16,8 +16,8 @@ const pwm_duty_t FAN_OUT_CONTINUOUS_HIGH_DUTY_VALUE = (uint32_t) ANALOG_OUT_MAX 
 const pwm_duty_t FAN_OUT_INTERVAL_FAN_ON_DUTY_VALUE = (uint32_t) ANALOG_OUT_MAX * INTERVAL_FAN_ON_VOLTAGE /  FAN_MAX_VOLTAGE;
 
 // Fan soft start and soft stop:
-const time16_ms_t FAN_START_INCREMENT = (time32_ms_t) (ANALOG_OUT_MAX - FAN_OUT_LOW_THRESHOLD) * SPEED_TRANSITION_CYCLE_DURATION_MS / FAN_START_DURATION_MS;
-const time16_ms_t FAN_STOP_DECREMENT = (time32_ms_t) (ANALOG_OUT_MAX - FAN_OUT_LOW_THRESHOLD) * SPEED_TRANSITION_CYCLE_DURATION_MS / FAN_STOP_DURATION_MS;
+const pwm_duty_t FAN_START_INCREMENT = (pwm_duty_t) (ANALOG_OUT_MAX - FAN_OUT_LOW_THRESHOLD) * SPEED_TRANSITION_CYCLE_DURATION_MS / FAN_START_DURATION_MS;
+const pwm_duty_t FAN_STOP_DECREMENT = (pwm_duty_t) (ANALOG_OUT_MAX - FAN_OUT_LOW_THRESHOLD) * SPEED_TRANSITION_CYCLE_DURATION_MS / FAN_STOP_DURATION_MS;
 
 //
 // CONTROLLER
@@ -212,7 +212,9 @@ void handleStateTransition(Event event) {
     return;
   }
   time32_s_t now = wdtTime_s();
-  FanState beforeState = fanState;
+  #ifdef VERBOSE
+    FanState beforeState = fanState;
+  #endif
   
   switch(fanState) {
     

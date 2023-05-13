@@ -12,8 +12,14 @@ volatile FanIntensity fanIntensity = INTENSITY_UNDEF;
 volatile InputInterrupt interruptSource = NO_INPUT_INTERRUPT;
  
 void configInputPins() {
-  configInputWithPullup(MODE_SWITCH_IN_PIN_1);
-  configInputWithPullup(MODE_SWITCH_IN_PIN_2);
+  #if defined(__AVR_ATmega328P__)
+    configInputWithPullup(MODE_SWITCH_IN_PIN_1);
+    configInputWithPullup(MODE_SWITCH_IN_PIN_2);
+
+  #elif defined(__AVR_ATtiny85__)
+    configInputWithPullup(MODE_SWITCH_IN_PIN);
+  #endif
+
   configInputWithPullup(INTENSITY_SWITCH_IN_PIN_1);
   configInputWithPullup(INTENSITY_SWITCH_IN_PIN_2);
 }
@@ -26,9 +32,16 @@ void configOutputPins() {
 }
 
 
-boolean updateFanModeFromInputPins() {
-  uint8_t p1 = digitalRead(MODE_SWITCH_IN_PIN_1);
-  uint8_t p2 = digitalRead(MODE_SWITCH_IN_PIN_2);
+bool updateFanModeFromInputPins() {
+  #if defined(__AVR_ATmega328P__)
+    uint8_t p1 = digitalRead(MODE_SWITCH_IN_PIN_1);
+    uint8_t p2 = digitalRead(MODE_SWITCH_IN_PIN_2);
+
+  #elif defined(__AVR_ATtiny85__)
+    uint8_t p1 = LOW;
+    uint8_t p2 = digitalRead(MODE_SWITCH_IN_PIN);
+  #endif
+
   FanMode value;
   if (p1) {
     value = MODE_OFF;
@@ -49,7 +62,7 @@ boolean updateFanModeFromInputPins() {
   return false;
 }
 
-boolean updateFanIntensityFromInputPins() {
+bool updateFanIntensityFromInputPins() {
   uint8_t p1 = digitalRead(INTENSITY_SWITCH_IN_PIN_1);
   uint8_t p2 = digitalRead(INTENSITY_SWITCH_IN_PIN_2);
   FanIntensity value;
@@ -95,7 +108,7 @@ FanIntensity getFanIntensity() {
 void resetInputInterrupt() {
   interruptSource = NO_INPUT_INTERRUPT;
 }
-boolean isInputInterrupt() {
+bool isInputInterrupt() {
   return interruptSource != NO_INPUT_INTERRUPT;
 } 
 
@@ -135,7 +148,7 @@ void configPinChangeInterrupts() {
 
   #elif defined(__AVR_ATtiny85__)
     GIMSK|= _BV(PCIE);
-    PCMSK|= _BV(PCINT1) | _BV(PCINT3);    // Configure PB1 and PB3 as interrupt source
+    PCMSK|= _BV(PCINT0) | _BV(PCINT3) | _BV(PCINT3);    // Configure PB2, PB3 and PB4 as pin-change interrupt source
   #endif
 }
 
@@ -145,12 +158,7 @@ ISR (PCINT0_vect) {       // Interrupt service routine for Pin Change Interrupt 
   if (updateFanModeFromInputPins()) {
     interruptSource = MODE_CHANGED_INTERRUPT;
     modeChangedHandler();
-  }
-}
-
-ISR (PCINT2_vect) {       // Interrupt service routine for Pin Change Interrupt Request 2
-  debounceSwitch();
-  if (updateFanIntensityFromInputPins()) {
+  } else if (updateFanIntensityFromInputPins()) {
     interruptSource = INTENSITY_CHANGED_INTERRUPT;
     intensityChangedHandler();
   }
@@ -210,12 +218,12 @@ bool isPwmActive() {
   return fanDutyCycleValue != ANALOG_OUT_MIN   // fan off – no PWM required
       && fanDutyCycleValue != ANALOG_OUT_MAX;       // fan on at maximum – no PWM required
 }
-void setStatusLED(boolean on) {
+void setStatusLED(bool on) {
   statusLEDState = on;
   digitalWrite(STATUS_LED_OUT_PIN, on);
 }
 
-void setFanPower(boolean on) {
+void setFanPower(bool on) {
   digitalWrite(FAN_POWER_ON_OUT_PIN, on);
 }
 

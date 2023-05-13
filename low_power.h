@@ -6,7 +6,8 @@
 
   void configLowPower();
   
-  boolean delayInterruptible(time16_ms_t duration);
+  boolean delayInterruptible_millis(time16_ms_t duration);
+  boolean delayInterruptible_seconds(time16_s_t duration);
   
   void waitForUserInput();
   

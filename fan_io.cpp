@@ -158,8 +158,8 @@ ISR (PCINT2_vect) {       // Interrupt service routine for Pin Change Interrupt 
 
 void configPWM1() {
   #if defined(__AVR_ATmega328P__)
-    // nothing --> use analogWrite as is
-    // No specific PWM frequency
+    configOutput(FAN_PWM_OUT_PIN);  // use analogWrite as is
+    // No specific PWM frequency --> default = 490 Hz
   
   #elif defined(__AVR_ATtiny85__)
     // Configure Timer/Counter1 Control Register 1 (TCR1) 

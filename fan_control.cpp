@@ -1,6 +1,6 @@
 #include "fan_control.h"
 #include "low_power.h"
-#include "time.h"
+#include "wdt_time.h"
 
 //
 // ANALOG OUT
@@ -102,7 +102,7 @@ time16_s_t mapToIntervalPauseDuration(FanIntensity intensity) {
 }
   
 #ifdef VERBOSE
-  char* fanStateName(FanState state) {
+  const char* fanStateName(FanState state) {
     switch (state) {
       case FAN_OFF: return "OFF";
       case FAN_SPEEDING_UP: return "SPEEDING UP";
@@ -113,7 +113,7 @@ time16_s_t mapToIntervalPauseDuration(FanIntensity intensity) {
     }
   }
   
-  char* eventName(Event event) {
+  const char* eventName(Event event) {
     switch (event) {
       case EVENT_NONE: return "NONE";
       case MODE_CHANGED: return "Mode changed";
@@ -208,7 +208,7 @@ void handleStateTransition(Event event) {
   if (event == EVENT_NONE) {
     return;
   }
-  time32_s_t now = _time_s();
+  time32_s_t now = wdtTime_s();
   FanState beforeState = fanState;
   
   switch(fanState) {
@@ -260,6 +260,9 @@ void handleStateTransition(Event event) {
           fanState = FAN_STEADY;
           intervalPhaseBeginTime = now;
           setStatusLED(LOW);
+          break;
+
+        default:
           break;
       }
       break;
@@ -334,6 +337,9 @@ void handleStateTransition(Event event) {
           }
           setStatusLED(LOW);
           break;
+
+        default:
+          break;
       }
       break;
       
@@ -381,9 +387,9 @@ void handleStateTransition(Event event) {
 }
 
 void resetPauseBlip() {
-  lastPauseBlipTime = _time_s();
+  lastPauseBlipTime = wdtTime_s();
 }
   
-time32_ms_t getLastPauseBlipTime() {
+time32_s_t getLastPauseBlipTime() {
   return lastPauseBlipTime;
 }

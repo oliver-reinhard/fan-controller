@@ -1,4 +1,4 @@
-#include <avr/delay.h>
+#include <util/delay.h>
 #include "io_util.h"
   
 void configInput(pin_t pin) {
@@ -29,6 +29,6 @@ void flashLED(pin_t pin, uint8_t times) {
   }
 }
   
-static inline void debounceSwitch() {
+void debounceSwitch() {
   delay(SWITCH_DEBOUNCE_WAIT_MS);
 }

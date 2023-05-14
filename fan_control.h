@@ -26,8 +26,8 @@
   const duration16_s_t INTERVAL_PAUSE_LONG_DURATION = 30;             // [s]
   
   // Fan soft start and stop:
-  const duration16_ms_t FAN_START_DURATION_MS = 2000;                  // [ms] duration from full stop to full throttle
-  const duration16_ms_t FAN_STOP_DURATION_MS = 1000;                   // [ms] duration from full throttle to full stop
+  const duration16_ms_t FAN_START_DURATION_MS = 4000;                  // [ms] duration from full stop to full throttle
+  const duration16_ms_t FAN_STOP_DURATION_MS = 4000;                   // [ms] duration from full throttle to full stop
   const bool  BLINK_LED_DURING_SPEED_TRANSITION = true;
   
   // Control cycle: PWM parameters are set only once per cycle

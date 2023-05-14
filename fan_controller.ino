@@ -25,6 +25,10 @@ void setup() {
   configPWM1();
   configLowPower();
   configWatchdogTime();
+
+  delay(2000);
+  flashLED(STATUS_LED_OUT_PIN, 6);
+  delay(2000);
   
   initFanControl();
 

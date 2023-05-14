@@ -148,7 +148,7 @@ void configPinChangeInterrupts() {
 
   #elif defined(__AVR_ATtiny85__)
     GIMSK|= _BV(PCIE);
-    PCMSK|= _BV(PCINT0) | _BV(PCINT3) | _BV(PCINT4);    // Configure PB2, PB3 and PB4 as pin-change interrupt source
+    PCMSK|= _BV(PCINT2) | _BV(PCINT3) | _BV(PCINT4);    // Configure PB0, PB3 and PB4 as pin-change interrupt source
   #endif
 }
 

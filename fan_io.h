@@ -23,14 +23,14 @@
     const pin_t SLEEP_LED_OUT_PIN = 4;            // PD4 - digital out; on while MCU is in sleep mode 
   
   #elif defined(__AVR_ATtiny85__)
-    const pin_t MODE_SWITCH_IN_PIN = PB0;         // digital: LOW --> CONTINOUS, HIGH --> INTERVAL (HIGH --> port configured as pull-up)
+    const pin_t MODE_SWITCH_IN_PIN = PB2;         // digital: LOW --> CONTINOUS, HIGH --> INTERVAL (HIGH --> port configured as pull-up)
     const pin_t INTENSITY_SWITCH_IN_PIN_1 = PB4;  // digital: PB4==LOW  && PB3==HIGH  --> LOW INTENSITY
     const pin_t INTENSITY_SWITCH_IN_PIN_2 = PB3;  // digital: PB4==HIGH && PB3==LOW   --> HIGH INTENSITY
                                                   //          PD4==HIGH && PD3==HIGH  --> MEDIUM INTENSITY
     
     const pin_t FAN_POWER_ON_OUT_PIN = PB5;       // Fan power: MOSFET on/off (some fans don't stop at PWM duty cycle = 0%)
     const pin_t FAN_PWM_OUT_PIN = PB1;            // PWM signal @ 25 kHz
-    const pin_t STATUS_LED_OUT_PIN = PB2;         // digital out; blinks shortly in long intervals when fan is in interval mode
+    const pin_t STATUS_LED_OUT_PIN = PB0;         // digital out; blinks shortly in long intervals when fan is in interval mode
   #endif 
 
   // Fan electrical characteristics:

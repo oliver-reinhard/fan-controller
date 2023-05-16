@@ -35,7 +35,7 @@
 
   // Fan electrical characteristics:
   const millivolt_t FAN_MAX_VOLTAGE = 13000;                       // [mV]
-  const millivolt_t FAN_LOW_THRESHOLD_VOLTAGE = 4400;              // [mV] // below this voltage, the fan will not move
+  const millivolt_t FAN_LOW_THRESHOLD_VOLTAGE = 4200;              // [mV] // below this voltage, the fan will not move
   
   // --------------------
   // FIXED VALUES -- DO NOT CHANGE (unless you know what you're doing)
@@ -47,7 +47,7 @@
     #if (F_CPU == 1000000UL)
       // PWM frequency = 1 MHz / 1 / 40 = 25 kHz 
       const uint8_t TIMER1_PRESCALER = 1;     // divide by 1
-      const uint8_t TIMER1_COUNT_TO = 40;     // count to 40
+      const uint8_t TIMER1_COUNT_TO = 160;     // count to 40
     #elif #if (F_CPU == 128000UL)
       // PWM frequency = 128 kHz / 1 / 5 = 25.6 kHz 
       const uint8_t TIMER1_PRESCALER = 1;     // divide by 1

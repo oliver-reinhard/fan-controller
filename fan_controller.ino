@@ -26,8 +26,8 @@ void setup() {
   configLowPower();
   configWatchdogTime();
 
-  delay(2000);
-  flashLED(STATUS_LED_OUT_PIN, 6);
+  delay(1000);
+  flashLED(STATUS_LED_OUT_PIN, 3);
   delay(2000);
   
   initFanControl();

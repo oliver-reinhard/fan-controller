@@ -7,8 +7,8 @@
   #if defined(__AVR_ATmega328P__)
     #define VERBOSE
   #endif
-  
-  typedef uint8_t pwm_duty_t;
+
+  typedef uint16_t millivolt_t;
   
   #if defined(__AVR_ATmega328P__)
     const pin_t MODE_SWITCH_IN_PIN_1 = 8;         // PB0 - digital: PB0==HIGH               --> OFF (HIGH --> port configured as pull-up)

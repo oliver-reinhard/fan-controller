@@ -127,9 +127,7 @@ time16_s_t mapToIntervalPauseDuration(FanIntensity intensity) {
 #endif
 
 void fanOn(FanMode mode) {
-  configOutput(FAN_POWER_ON_OUT_PIN);
   configOutput(FAN_PWM_OUT_PIN);
-  setFanPower(HIGH);
   setFanDutyCycle(FAN_OUT_LOW_THRESHOLD);
   if (mode == MODE_CONTINUOUS) {
     fanTargetDutyValue = mapToFanDutyValue(getFanIntensity());
@@ -139,15 +137,12 @@ void fanOn(FanMode mode) {
 }
 
 void fanOff(FanMode mode) {
-  setFanPower(LOW);
   setFanDutyCycle(FAN_OUT_FAN_OFF);
   if (mode == MODE_INTERVAL) {
      intervalPauseDuration = mapToIntervalPauseDuration(getFanIntensity());
   }
-  configInput(FAN_POWER_ON_OUT_PIN);
   configInput(FAN_PWM_OUT_PIN);
 }
-
 
 void speedUp() {
   pwm_duty_t transitioningDutyValue = getFanDutyCycle();

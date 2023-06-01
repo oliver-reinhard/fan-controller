@@ -271,10 +271,6 @@ void setStatusLED(bool on) {
   digitalWrite(STATUS_LED_OUT_PIN, on);
 }
 
-void setFanPower(bool on) {
-  digitalWrite(FAN_POWER_ON_OUT_PIN, on);
-}
-
 void invertStatusLED() {
   setStatusLED(statusLEDState == HIGH ? LOW : HIGH);
 }

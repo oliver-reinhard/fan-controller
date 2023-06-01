@@ -61,28 +61,9 @@ void setup() {
     Serial.println(F_CPU);
   #endif
 
-  const uint8_t PCT_START = 5;
-  const uint8_t PCT_END = 10;
-  const uint8_t PCT_INCR = 1;
-  const uint8_t STEPS = (PCT_END - PCT_START) / PCT_INCR + 1;
-  const pwm_duty_t PWM_DUTY_START = (pwm_duty_t) (((uint16_t)PWM_DUTY_MAX) * PCT_START / 100);
-  const pwm_duty_t PWM_DUTY_INCR = (pwm_duty_t) (((uint16_t)PWM_DUTY_MAX) * PCT_INCR / 100);
+  // test_steady_increments();
+  test_specific_duty_values();
 
-
-  for(uint8_t i=1; i<=STEPS; i++) {
-    flashLED(STATUS_LED_OUT_PIN, i);
-    uint8_t pct_value = PCT_START + (i-1) * PCT_INCR;
-    pwm_duty_t duty_value = PWM_DUTY_START + (i-1) * PWM_DUTY_INCR;
-    #ifdef VERBOSE
-      Serial.print(pct_value);
-      Serial.print("% -> ");
-      Serial.println(duty_value);
-    #endif
-    setFanDutyCycle(duty_value);
-    delay(10000);
-    setFanDutyCycle(0);
-    delay(2000);
-  }
   turnOnLED(STATUS_LED_OUT_PIN, 2000);
   #ifdef VERBOSE
     Serial.print("Done");
@@ -95,6 +76,45 @@ void setup() {
 }
 
 void loop() {
+}
+
+// -------------
+
+void testCycle(uint8_t blinkTimes, pwm_duty_t value) {
+    flashLED(STATUS_LED_OUT_PIN, blinkTimes);
+    #ifdef VERBOSE
+      Serial.println(value);
+    #endif
+    setFanDutyCycle(value);
+    delay(10000);
+    setFanDutyCycle(0);
+    delay(4000);
+}
+
+void test_steady_increments() {
+  const uint8_t PCT_START = 5;
+  const uint8_t PCT_END = 10;
+  const uint8_t PCT_INCR = 1;
+  const uint8_t STEPS = (PCT_END - PCT_START) / PCT_INCR + 1;
+  const pwm_duty_t PWM_DUTY_START = (pwm_duty_t) (((uint16_t)PWM_DUTY_MAX) * PCT_START / 100);
+  const pwm_duty_t PWM_DUTY_INCR = (pwm_duty_t) (((uint16_t)PWM_DUTY_MAX) * PCT_INCR / 100);
+
+  for(uint8_t i=1; i<=STEPS; i++) {
+    uint8_t pct_value = PCT_START + (i-1) * PCT_INCR;
+    pwm_duty_t duty_value = PWM_DUTY_START + (i-1) * PWM_DUTY_INCR;
+    #ifdef VERBOSE
+      Serial.print(pct_value);
+      Serial.print("% -> ");
+      Serial.println(duty_value);
+    #endif
+    testCycle(i, duty_value);
+  }
+}
+
+void test_specific_duty_values() {
+  testCycle(1, 20);
+  testCycle(2, 40);
+  testCycle(3, PWM_DUTY_MAX);
 }
 
 void configPWM1() {

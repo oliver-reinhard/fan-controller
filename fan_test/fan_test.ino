@@ -9,7 +9,7 @@
 #endif
 
 #if defined(__AVR_ATmega328P__)
-  const pin_t FAN_PWM_OUT_PIN = 9;              // PIN 9 — PWM signal !! DO NOT CHANGE PIN !! (PWM Configuration)
+  const pin_t FAN_PWM_OUT_PIN = 9;              // PIN 9 — OC1A PWM signal !! DO NOT CHANGE PIN !! (PWM configuration is specific to Timer 1)
   const pin_t STATUS_LED_OUT_PIN = 8;           // PD0 - digital out; is on when fan is of, blinks during transitioning 
 
 #elif defined(__AVR_ATtiny85__)
@@ -18,13 +18,13 @@
 #endif 
 
 //
-// PWM / Timer1 scaling (ATtiny)
+// PWM / Timer1 scaling to 25 KHz
 //
-const pwm_duty_t PWM_DUTY_MAX = 255;
-
 #if defined(__AVR_ATmega328P__)
   const uint8_t TIMER1_PRESCALER = 1;      // divide by 1
   const uint16_t TIMER1_COUNT_TO = 320;    // count to this value (Timer 1 is 16 bit)
+
+  const pwm_duty_t PWM_DUTY_MAX = 255;
 
 #elif defined(__AVR_ATtiny85__)
   #if (F_CPU == 1000000UL)

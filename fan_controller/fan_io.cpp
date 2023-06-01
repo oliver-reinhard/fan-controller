@@ -166,8 +166,56 @@ ISR (PCINT0_vect) {       // Interrupt service routine for Pin Change Interrupt 
 
 void configPWM1() {
   #if defined(__AVR_ATmega328P__)
-    configOutput(FAN_PWM_OUT_PIN);  // use analogWrite as is
-    // No specific PWM frequency --> default = 490 Hz
+    // Arduino default PWM frequency = 490 Hz
+
+    // Configure Timer_1 for PWM @ 25 kHz.
+    // Source: https://www.arduined.eu/arduino-pwm-pc-fan-control/
+    //
+    // Undo the configuration done by the Arduino core library:
+    TCCR1A = 0; 
+    TCCR1B = 0;
+
+    // Waveform Generator Mode (WGM):
+    // -> See Table 15-5 of ATmega328P Datasheet
+    // - 4 bits, distributed across TCCR1A and TCCR1B 
+    // - Set to mode #10: "PWM, phase correct, 9-bit, TOP = ICR1" 
+    //   | WGM13 | WGM12 | WGM11 | WGM10 |
+    //   |   1   |   0   |   1   |   0   |
+
+    // Compare Output Mode for chanlels A / B (COM)
+    // !!! Channels A and B have NOTHING TO DO WITH CONTROL REGISTERS A and B !!!
+    // -> See Table 15-4 of ATmega328P Datasheet (this table applies due to the WGM13 bit)
+    // - Set to "Clear OC1A/OC1B on compare match when up-counting."
+    // | COM1A1 | COM1A0 | COM1B1 | COM1B0 | 
+    // |   1    |   0    |    1   |   0    |
+
+    // Prescaler / Clock Select (CS)
+    // - 3 bits
+    // - Set to 1 (no prescaling)
+    //   | CS12 | CS11 | CS10 | 
+    //   |  0   |  0   |   1  |
+  
+    // Configure Timer/Counter1 Control Register A (TCCR1A) 
+    // | COM1A1 | COM1A0 | COM1B1 | COM1B0 |  -  |  -  | WGM11 | WGM10 |
+    // |   1    |   0    |    1   |   0    |  0  |  0  |   1   |   0   |
+    TCCR1A = _BV(COM1A1)
+          | _BV(COM1B1)
+          | _BV(WGM11);
+
+    // Configure Timer/Counter1 Control Register B (TCCR1B) 
+    // - Input Capture Noise Canceler (ICNC)
+    // - Input Capture Edge Select (ICNS)
+    // | ICNC1 |  ICES1 |  -  | WGM13 | WGM12 | CS12 | CS11 | CS10 | 
+    // |   0   |    0   |  0  |   1   |   0   |  0   |  0   |   1  |
+    TCCR1B = _BV(WGM13)  
+          | _BV(CS10);
+
+    TCNT1 = 0;  // Reset timer
+    ICR1 = TIMER1_COUNT_TO; // TOP (= count to this value)
+            
+    // Set the PWM pin as output.
+    // configOutput(9); // OC1A -- we use this port for input
+    configOutput(10);  // OC1B 
   
   #elif defined(__AVR_ATtiny85__)
     // Configure Timer/Counter1 Control Register 1 (TCR1) 

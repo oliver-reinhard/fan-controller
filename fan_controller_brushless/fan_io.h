@@ -7,8 +7,6 @@
   #if defined(__AVR_ATmega328P__)
     #define VERBOSE
   #endif
-
-  typedef uint16_t millivolt_t;
   
   #if defined(__AVR_ATmega328P__)
     const pin_t MODE_SWITCH_IN_PIN_1 = 8;         // PB0 - digital: PB0==HIGH               --> OFF (HIGH --> port configured as pull-up)
@@ -33,8 +31,7 @@
   #endif 
 
   // Fan electrical characteristics:
-  const millivolt_t FAN_MAX_VOLTAGE = 13000;                       // [mV]
-  const millivolt_t FAN_LOW_THRESHOLD_VOLTAGE = 4200;              // [mV] // below this voltage, the fan will not move
+  const  pwm_duty_t FAN_LOW_THRESHOLD_DUTY_VALUE = 20;  // [mV] // below this DUTY_VALUE, the fan will not move
   
   // --------------------
   // FIXED VALUES -- DO NOT CHANGE (unless you know what you're doing)
@@ -50,11 +47,11 @@
     #if (F_CPU == 1000000UL)
       // PWM frequency = 1 MHz / 1 / 40 = 25 kHz 
       const uint8_t TIMER1_PRESCALER = 1;     // divide by 1
-      const uint8_t TIMER1_COUNT_TO = 160;     // count to 40
+      const uint8_t TIMER1_COUNT_TO = 40;    // count to this value
     #elif #if (F_CPU == 128000UL)
       // PWM frequency = 128 kHz / 1 / 5 = 25.6 kHz 
       const uint8_t TIMER1_PRESCALER = 1;     // divide by 1
-      const uint8_t TIMER1_COUNT_TO = 5;      // count to 5
+      const uint8_t TIMER1_COUNT_TO = 5;      // count to this value
     #else
       #error("F_CPU is undefined or its value is unknown")
     #endif
@@ -73,8 +70,6 @@
     const pwm_duty_t ANALOG_OUT_MIN = 0;                 // Arduino constant
     const pwm_duty_t ANALOG_OUT_MAX = TIMER1_COUNT_TO;   // PWM control
   #endif
-
-  const pwm_duty_t FAN_OUT_LOW_THRESHOLD = (uint32_t) ANALOG_OUT_MAX * FAN_LOW_THRESHOLD_VOLTAGE /  FAN_MAX_VOLTAGE;
 
   // Interfaces:
   const time16_ms_t INTERVAL_PAUSE_BLIP_OFF_DURATION_S = 5;      // [s] LED blips during pause: HIGH state

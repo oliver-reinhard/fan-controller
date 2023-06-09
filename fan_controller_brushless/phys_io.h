@@ -1,13 +1,17 @@
-#ifndef FAN_IO_H_INCLUDED
-  #define FAN_IO_H_INCLUDED
+#ifndef PHYS_IO_H_INCLUDED
+  #define PHYS_IO_H_INCLUDED
 
   #include <Arduino.h> 
-  #include "io_util.h"
+  #include <io_util.h>
+  #include <limits.h>
   
   #if defined(__AVR_ATmega328P__)
     #define VERBOSE
   #endif
   
+  //
+  // PINS
+  //
   #if defined(__AVR_ATmega328P__)
     const pin_t MODE_SWITCH_IN_PIN_1 = 8;         // PB0 - digital: PB0==HIGH               --> OFF (HIGH --> port configured as pull-up)
     const pin_t MODE_SWITCH_IN_PIN_2 = 9;         // PB1 - digital: PB0==HIGH && PB1==LOW   --> CONTINUOUS
@@ -30,18 +34,15 @@
     const pin_t STATUS_LED_OUT_PIN = PB0;         // digital out; blinks shortly in long intervals when fan is in interval mode
   #endif 
 
-  // Fan electrical characteristics:
-  const  pwm_duty_t FAN_LOW_THRESHOLD_DUTY_VALUE = 20;  // [mV] // below this DUTY_VALUE, the fan will not move
-  
-  // --------------------
-  // FIXED VALUES -- DO NOT CHANGE (unless you know what you're doing)
-
 //
-// PWM / Timer1 scaling to 25 kHz
+// ANALOG OUT (PWM / Timer1 scaling to 25 kHz)
 //
 #if defined(__AVR_ATmega328P__)
   const uint8_t TIMER1_PRESCALER = 1;      // divide by 1
   const uint16_t TIMER1_COUNT_TO = 320;    // count to this value (Timer 1 is 16 bit)
+
+  const pwm_duty_t ANALOG_OUT_MIN = 0;          // Arduino constant
+  const pwm_duty_t ANALOG_OUT_MAX = UCHAR_MAX;  // PWM control
 
 #elif defined(__AVR_ATtiny85__)
     #if (F_CPU == 1000000UL)
@@ -53,70 +54,26 @@
       const uint8_t TIMER1_PRESCALER = 1;     // divide by 1
       const uint8_t TIMER1_COUNT_TO = 5;      // count to this value
     #else
-      #error("F_CPU is undefined or its value is unknown")
+      #error("F_CPU is undefined or its value is unexpected")
     #endif
-  #endif
-  
-  // --------------------
-  
-  //
-  // ANALOG OUT
-  //
-  #if defined(__AVR_ATmega328P__)
-    const pwm_duty_t ANALOG_OUT_MIN = 0;        // Arduino constant
-    const pwm_duty_t ANALOG_OUT_MAX = 255;      // PWM control
-    
-  #elif defined(__AVR_ATtiny85__)
+
     const pwm_duty_t ANALOG_OUT_MIN = 0;                 // Arduino constant
     const pwm_duty_t ANALOG_OUT_MAX = TIMER1_COUNT_TO;   // PWM control
   #endif
-
-  // Interfaces:
-  const time16_ms_t INTERVAL_PAUSE_BLIP_OFF_DURATION_S = 5;      // [s] LED blips during pause: HIGH state
-  const time16_ms_t INTERVAL_PAUSE_BLIP_ON_DURATION_MS = 200;    // [ms] LED LOW state
-
-  //
-  // INPUTS
-  //
-  typedef enum {MODE_UNDEF, MODE_OFF, MODE_CONTINUOUS, MODE_INTERVAL} FanMode;
   
-  typedef enum {INTENSITY_UNDEF, INTENSITY_LOW, INTENSITY_MEDIUM, INTENSITY_HIGH} FanIntensity;
+  // FAN SPEED CONTROL:
+  const  pwm_duty_t FAN_LOW_THRESHOLD_DUTY_VALUE = 20;  // [mV] // below this DUTY_VALUE @ 13 Volts, the fan will not move
 
-  typedef enum {NO_INPUT_INTERRUPT, MODE_CHANGED_INTERRUPT, INTENSITY_CHANGED_INTERRUPT} InputInterrupt;
-
-
-  // 
-  // Interrupt handling
-  //
-  void resetInputInterrupt();
-  bool isInputInterrupt();
+  // Continuous operation:
+  const pwm_duty_t FAN_CONTINUOUS_LOW_DUTY_VALUE = FAN_LOW_THRESHOLD_DUTY_VALUE;   // do not set lower than FAN_LOW_THRESHOLD_DUTY_VALUE --> fan would not start
+  const pwm_duty_t FAN_CONTINUOUS_MEDIUM_DUTY_VALUE = 40;
+  const pwm_duty_t FAN_CONTINUOUS_HIGH_DUTY_VALUE = ANALOG_OUT_MAX;
+  
+  // Interval operation:
+  const pwm_duty_t INTERVAL_FAN_ON_DUTY_VALUE = ANALOG_OUT_MAX;
   
   //
-  // FUNCTIONS
+  // CONFIGURATION
   //
-  void configInputPins();
-  void configOutputPins();
-  void configInt0Interrupt();
-  void configPinChangeInterrupts();
-  void configPWM1();
-  
-  // Returns true if value changed
-  bool updateFanModeFromInputPins();
-  FanMode getFanMode();
-  
-  // Returns true if value changed
-  bool updateFanIntensityFromInputPins();
-  FanIntensity getFanIntensity();
-
-  
-  void setFanPower(bool on);
-  void setFanDutyCycle(pwm_duty_t value);
-  pwm_duty_t getFanDutyCycle();
-  bool isPwmActive();
-  
-  void setStatusLED(bool on);
-  void invertStatusLED();
-  
-  void showPauseBlip();
-
+  void configPhysicalIO();
 #endif

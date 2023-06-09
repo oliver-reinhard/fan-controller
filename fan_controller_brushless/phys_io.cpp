@@ -1,16 +1,7 @@
-#include "fan_io.h"
+#include <avr/power.h>
+#include <avr/sleep.h>
+#include "phys_io.h"
 
-bool statusLEDState = LOW;
-
-volatile pwm_duty_t fanDutyCycleValue = 0; // value actually set on output pin
-
-volatile FanMode fanMode = MODE_UNDEF;
-volatile FanIntensity fanIntensity = INTENSITY_UNDEF;
-  
-// volatile --> variable can change at any time --> prevents compiler from optimising away a read access that would 
-// return a value changed by an interrupt handler
-volatile InputInterrupt interruptSource = NO_INPUT_INTERRUPT;
- 
 void configInputPins() {
   #if defined(__AVR_ATmega328P__)
     configInputWithPullup(MODE_SWITCH_IN_PIN_1);
@@ -31,112 +22,6 @@ void configOutputPins() {
   #endif
 }
 
-
-bool updateFanModeFromInputPins() {
-  #if defined(__AVR_ATmega328P__)
-    uint8_t p1 = digitalRead(MODE_SWITCH_IN_PIN_1);
-    uint8_t p2 = digitalRead(MODE_SWITCH_IN_PIN_2);
-
-  #elif defined(__AVR_ATtiny85__)
-    uint8_t p1 = LOW;
-    uint8_t p2 = digitalRead(MODE_SWITCH_IN_PIN);
-  #endif
-
-  FanMode value;
-  if (p1) {
-    value = MODE_OFF;
-  } else if(p2) {
-    value = MODE_CONTINUOUS;
-  } else {
-    value = MODE_INTERVAL;
-  }
-  #ifdef VERBOSE
-    Serial.print("Read Fan Mode: ");
-    Serial.println(value == MODE_INTERVAL ? "INTERVAL" : (value == MODE_CONTINUOUS ? "CONTINUOUS" :"OFF"));
-  #endif
-  
-  if (value != fanMode) {
-    fanMode = value;
-    return true;
-  }
-  return false;
-}
-
-bool updateFanIntensityFromInputPins() {
-  uint8_t p1 = digitalRead(INTENSITY_SWITCH_IN_PIN_1);
-  uint8_t p2 = digitalRead(INTENSITY_SWITCH_IN_PIN_2);
-  FanIntensity value;
-  if (! p1 && p2) {
-    value = INTENSITY_LOW;
-  } else if(p1 && ! p2) {
-    value = INTENSITY_HIGH;
-  } else {
-    value = INTENSITY_MEDIUM;
-  }
-  #ifdef VERBOSE
-    Serial.print("Read Fan Intensity: ");
-    Serial.println(value == INTENSITY_LOW ? "LOW" : (value == INTENSITY_HIGH ? "HIGH" :"MEDIUM"));
-  #endif
-  
-  if (value != fanIntensity) {
-    fanIntensity = value;
-    return true;
-  }
-  return false;
-}
-
-
-FanMode getFanMode() {
-  if (fanMode == MODE_UNDEF) {
-    updateFanModeFromInputPins();
-  }
-  return fanMode;
-}
-
-
-FanIntensity getFanIntensity() {
-  if (fanIntensity == INTENSITY_UNDEF) {
-    updateFanIntensityFromInputPins();
-  }
-  return fanIntensity;
-}
-
-
-//
-// INTERRUPTS
-//
-void resetInputInterrupt() {
-  interruptSource = NO_INPUT_INTERRUPT;
-}
-bool isInputInterrupt() {
-  return interruptSource != NO_INPUT_INTERRUPT;
-} 
-
-// 
-// Event handlers (function pointers)
-//
-void (* modeChangedHandler)();
-void (* intensityChangedHandler)();
-  
-  
-void configInt0Interrupt() {
-  #if defined(__AVR_ATmega328P__)
-    EIMSK |= _BV(INT0);      // Enable INT0 (external interrupt) 
-    EICRA |= _BV(ISC00);     // Any logical change triggers an interrupt
-
-  #elif defined(__AVR_ATtiny85__)
-    GIMSK |= _BV(INT0);      // Enable INT0 (external interrupt) 
-    MCUCR |= _BV(ISC00);     // Any logical change triggers an interrupt
-  #endif
-}
-
-
-ISR (INT0_vect) {       // Interrupt service routine for INT0 on PB2
-  debounceSwitch();
-  interruptSource = MODE_CHANGED_INTERRUPT;
-  modeChangedHandler();
-}
-
 void configPinChangeInterrupts() {
   // Pin-change interrupts are triggered for each level-change; this cannot be configured
   #if defined(__AVR_ATmega328P__)
@@ -152,19 +37,7 @@ void configPinChangeInterrupts() {
   #endif
 }
 
-
-ISR (PCINT0_vect) {       // Interrupt service routine for Pin Change Interrupt Request 0
-  debounceSwitch();
-  if (updateFanModeFromInputPins()) {
-    interruptSource = MODE_CHANGED_INTERRUPT;
-    modeChangedHandler();
-  } else if (updateFanIntensityFromInputPins()) {
-    interruptSource = INTENSITY_CHANGED_INTERRUPT;
-    intensityChangedHandler();
-  }
-}
-
-void configPWM1() {
+void configPWM() {
   #if defined(__AVR_ATmega328P__)
     // Arduino default PWM frequency = 490 Hz
 
@@ -248,35 +121,41 @@ void configPWM1() {
   #endif
 }
 
-void setFanDutyCycle(pwm_duty_t value) {
-  fanDutyCycleValue = value;
+void configLowPower() {
   #if defined(__AVR_ATmega328P__)
-    analogWrite(FAN_PWM_OUT_PIN, value); // Send PWM signal
+    ADCSRA &= ~(1 << ADEN); // Disable ADC
+    power_adc_disable();
+    power_spi_disable();
+    #ifndef VERBOSE
+      power_usart0_disable();
+    #endif
+    power_twi_disable();
+    
+    // power_timer0_disable(); // cannot disable, required for millis() function
+    // power_timer1_disable(); // cannot disable, required for PWM output on Pin 10
+    power_timer2_disable(); 
 
   #elif defined(__AVR_ATtiny85__)
-    OCR1A = value;
+    power_usi_disable(); 
+    
+    ADCSRA &= ~_BV(ADEN);   // Disable ADC --> saves 320 µA on ATtiny85
+    ACSR   |=  _BV(ACD);
+    power_adc_disable();
+    
+    cli();                  // Stop interrupts to ensure the BOD timed sequence executes as required
+    sleep_bod_disable();    // Brown-out disable
+    sei();
   #endif
 }
 
-pwm_duty_t getFanDutyCycle() {
-  return fanDutyCycleValue;
-}
+void configPhysicalIO() {
+  configInputPins();
+  configOutputPins();
+  
+  //  configInt0Interrupt(); // triggered by PD2 (mode switch)
+  configPinChangeInterrupts();
+  sei();
+  configPWM();
 
-bool isPwmActive() {
-  return fanDutyCycleValue != ANALOG_OUT_MIN   // fan off – no PWM required
-      && fanDutyCycleValue != ANALOG_OUT_MAX;       // fan on at maximum – no PWM required
-}
-void setStatusLED(bool on) {
-  statusLEDState = on;
-  digitalWrite(STATUS_LED_OUT_PIN, on);
-}
-
-void invertStatusLED() {
-  setStatusLED(statusLEDState == HIGH ? LOW : HIGH);
-}
-
-void showPauseBlip() {
-  setStatusLED(HIGH);
-  delay(INTERVAL_PAUSE_BLIP_ON_DURATION_MS);
-  setStatusLED(LOW);
+  configLowPower();
 }

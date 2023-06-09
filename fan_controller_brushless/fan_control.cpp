@@ -1,106 +1,116 @@
-#include "HardwareSerial.h"
+#include <Arduino.h> 
+#include <avr/sleep.h>
+
+#include <scheduler.h>
+#include <wdt_scheduler.h>
+#include <blink_task.h>
+#include "log_io.h"
 #include "fan_control.h"
-#include "low_power.h"
-#include "wdt_time.h"
+#define MAX_TASK_GROUPS_OVERRIDE 5
 
-//
-// ANALOG OUT
-//
-const pwm_duty_t FAN_OUT_FAN_OFF = ANALOG_OUT_MIN;
+const TaskGroup MODE_CHANGED_GROUP = 1;
+const TaskGroup INTENSITY_CHANGED_GROUP = 2;
+const TaskGroup SPEED_TRANSITION_GROUP = 3;
+const TaskGroup INTERVAL_GROUP = 4;
+const TaskGroup PAUSE_BLINK_GROUP = 5;
+const TaskGroup TASK_GROUPS[MAX_TASK_GROUPS_OVERRIDE] = {MODE_CHANGED_GROUP, INTENSITY_CHANGED_GROUP, SPEED_TRANSITION_GROUP, INTERVAL_GROUP, PAUSE_BLINK_GROUP};
 
+// forward declaration:
+void handleStateTransition(Event event);
+
+class FanScheduler : public WatchdogTimerBasedScheduler {
+  public:
+    FanScheduler(const TaskGroup groups[], const uint8_t groupCount) : WatchdogTimerBasedScheduler(groups, groupCount) { }
+  
+  protected:
+    WdtSleepMode sleepMode() { 
+      // cannot turn MCU off while fan is running at other than 100% duty cycle because timer is needed for PWM:
+      return logicalIO()->isPwmActive() ? SLEEP_MODE_IDLE : SLEEP_MODE_PWR_DOWN;
+    }
+};
+
+class ModeChangedTask : public AbstractTask {
+  public:
+    TaskGroup group() { return MODE_CHANGED_GROUP; }
+    const char *name() { return "Mode"; }
+    void action() {
+      handleStateTransition(MODE_CHANGED);
+    }
+};
+
+class IntensityChangedTask : public AbstractTask {
+  public:
+    TaskGroup group() { return INTENSITY_CHANGED_GROUP; }
+    const char *name() { return "Intensity"; }
+    void action() {
+      handleStateTransition(INTENSITY_CHANGED);
+    }
+};
+
+class IntervalModeTask : public BlinkTask {
+  public:
+    IntervalModeTask() : BlinkTask (INTERVAL_GROUP, 0 /* not used */) { };
+    const char *name() { return "Interval"; }
+
+   protected:
+      virtual void onAction()  { 
+        handleStateTransition(INTERVAL_PHASE_ENDED);
+      }
+      virtual void offAction() { 
+        handleStateTransition(INTERVAL_PHASE_ENDED);
+      }
+};
+
+// 
+// Singleton instances
 //
-// CONTROLLER
-//
+FanScheduler FAN_SCHEDULER = FanScheduler(TASK_GROUPS, MAX_TASK_GROUPS_OVERRIDE);
+
+BlinkTask SPEED_TRANSITION_BLINKER = BlinkTask(SPEED_TRANSITION_GROUP, STATUS_LED_OUT_PIN, 6);
+BlinkTask PAUSE_BLINKER = BlinkTask(PAUSE_BLINK_GROUP, STATUS_LED_OUT_PIN); // infinite (= runs until canceled)
+IntervalModeTask INTERVAL_MODE_TASK = IntervalModeTask(); // infinite (= runs until canceled)
+ModeChangedTask MODE_CHANGED_TASK = ModeChangedTask();
+IntensityChangedTask INTENSITY_CHANGED_TASK = IntensityChangedTask();
 
 volatile FanState fanState = FAN_OFF;          // current fan state
-
-volatile time32_s_t      intervalPhaseBeginTime = 0; // [s]
-volatile duration32_s_t  intervalPauseDuration;      // [s]
-
-volatile time32_ms_t     speedTransistionEndTime = 0;
-
-volatile time32_ms_t     lastPauseBlipTime = 0;
-  
-// (function pointers)
-extern void (* modeChangedHandler)();
-extern void (* intensityChangedHandler)();
-
-//
-// Event handlers
-//
-
-void handleModeChange() {
-  handleStateTransition(MODE_CHANGED);
-}
-
-void handleIntensityChange() {
-  handleStateTransition(INTENSITY_CHANGED);
-}
-
-void initFanControl() {
-  // Install input-change handlers (= assign function pointers)
-  modeChangedHandler = handleModeChange;
-  intensityChangedHandler = handleIntensityChange; 
-
-  getFanIntensity(); // ensure initialisation
-  if (getFanMode() != MODE_OFF) {
-    handleStateTransition(MODE_CHANGED);
-  }
-}
 
 //
 // FUNCTIONS
 //
+void controllerLoop() { FAN_SCHEDULER.loop();  }
 
-FanState getFanState() {
-  return fanState;
-}
-
-// [s]
-time32_s_t getIntervalPhaseBeginTime() { 
-  return intervalPhaseBeginTime;
-}
-
-// [s]
-duration16_s_t getIntervalPauseDuration() {
-  return intervalPauseDuration;
-}
-
-void resetPauseBlip() {
-  lastPauseBlipTime = wdtTime_s();
-}
-
-// [s]
-time32_s_t getLastPauseBlipTime() {
-  return lastPauseBlipTime;
-}
-
-void beginSpeedTransition(pwm_duty_t newTargetDutyValue) {
-  int16_t deltaDutyValue = (int16_t)getFanDutyCycle() - (int16_t)newTargetDutyValue;
-  if (deltaDutyValue > 0) {
-    speedTransistionEndTime =  millis() + FAN_START_DURATION_MS * deltaDutyValue / ANALOG_OUT_MAX;
-  } else if (deltaDutyValue < 0) {
-    speedTransistionEndTime =  millis() - FAN_STOP_DURATION_MS * deltaDutyValue / ANALOG_OUT_MAX;
+//
+// Used as interrupt handlers => becomes a task factory
+//
+void scheduleModeChangeTask() {
+  AbstractTask* speedTransition = FAN_SCHEDULER.taskForGroup(SPEED_TRANSITION_GROUP);
+  if (speedTransition != NULL) {
+    // a speed transition is underway => process update when it's done
+    FAN_SCHEDULER.scheduleTask(& MODE_CHANGED_TASK, speedTransition->timeToCompletion());
   } else {
-    speedTransistionEndTime =  millis();
+    FAN_SCHEDULER.scheduleTaskNow(& MODE_CHANGED_TASK);
   }
-  setFanDutyCycle(newTargetDutyValue);
 }
 
-void endSpeedTransition() {
-  speedTransistionEndTime = 0;
-  setStatusLED(LOW);
+//
+// Used as interrupt handlers => becomes a task factory
+//
+void scheduleIntensityChangedTask() {
+  AbstractTask* speedTransition = FAN_SCHEDULER.taskForGroup(SPEED_TRANSITION_GROUP);
+  if (speedTransition != NULL) {
+    // a speed transition is underway => process update when it's done
+    FAN_SCHEDULER.scheduleTask(& INTENSITY_CHANGED_TASK, speedTransition->timeToCompletion());
+  } else {
+    FAN_SCHEDULER.scheduleTaskNow(& INTENSITY_CHANGED_TASK);
+  }
 }
 
 // Applicable only in mode CONTINUOUS
-pwm_duty_t mapToFanDutyValue(FanIntensity intensity) {
+FanSpeed mapToFanSpeed(FanIntensity intensity) {
   switch(intensity) {
-    case INTENSITY_HIGH: 
-      return FAN_CONTINUOUS_HIGH_DUTY_VALUE;
-    case INTENSITY_MEDIUM: 
-      return FAN_CONTINUOUS_MEDIUM_DUTY_VALUE;
-    default: 
-      return FAN_CONTINUOUS_LOW_DUTY_VALUE;
+    case INTENSITY_HIGH:    return SPEED_FULL;
+    case INTENSITY_MEDIUM:  return SPEED_MEDIUM;
+    default:                return SPEED_MIN;
   }
 }
 
@@ -108,12 +118,9 @@ pwm_duty_t mapToFanDutyValue(FanIntensity intensity) {
 // Returns [s]
 time16_s_t mapToIntervalPauseDuration(FanIntensity intensity) {
   switch(intensity) {
-    case INTENSITY_HIGH: 
-      return INTERVAL_PAUSE_SHORT_DURATION; // [s]
-    case INTENSITY_MEDIUM: 
-      return INTERVAL_PAUSE_MEDIUM_DURATION; // [s]
-    default: 
-      return INTERVAL_PAUSE_LONG_DURATION; // [s]
+    case INTENSITY_HIGH:    return INTERVAL_PAUSE_SHORT_DURATION; // [s]
+    case INTENSITY_MEDIUM:  return INTERVAL_PAUSE_MEDIUM_DURATION; // [s]
+    default:                return INTERVAL_PAUSE_LONG_DURATION; // [s]
   }
 }
   
@@ -121,9 +128,7 @@ time16_s_t mapToIntervalPauseDuration(FanIntensity intensity) {
   const char* fanStateName(FanState state) {
     switch (state) {
       case FAN_OFF: return "OFF";
-      case FAN_SPEEDING_UP: return "SPEEDING UP";
-      case FAN_STEADY: return "STEADY";
-      case FAN_SLOWING_DOWN: return "SLOWING DOWN";
+      case FAN_ON: return "ON";
       case FAN_PAUSING: return "PAUSE";
       default: return "?";
     }
@@ -134,72 +139,38 @@ time16_s_t mapToIntervalPauseDuration(FanIntensity intensity) {
       case EVENT_NONE: return "NONE";
       case MODE_CHANGED: return "Mode changed";
       case INTENSITY_CHANGED: return "Intensity changed";
-      case TARGET_SPEED_REACHED: return "Speed reached";
       case INTERVAL_PHASE_ENDED: return "Phase ended";
       default: return "?";
     }
   }
 #endif
 
+void updateIntervalModeTaskPause() {
+  duration16_s_t duration =  mapToIntervalPauseDuration(logicalIO()->fanIntensity());
+  PAUSE_BLINKER.delays(INTERVAL_FAN_ON_DURATION*D_1S, duration*D_1S);
+}
+void animateTransition() {
+  FAN_SCHEDULER.scheduleTaskNow(& SPEED_TRANSITION_BLINKER);
+}
+
 void fanOn(FanMode mode) {
-  configOutput(FAN_PWM_OUT_PIN);
-  pwm_duty_t fanTargetDutyValue;
+  animateTransition();
   if (mode == MODE_CONTINUOUS) {
-    fanTargetDutyValue = mapToFanDutyValue(getFanIntensity());
+    logicalIO()->fanSpeed(mapToFanSpeed(logicalIO()->fanIntensity()));
   } else { /* getFanMode() == MODE_INTERVAL */
-    fanTargetDutyValue = INTERVAL_FAN_ON_DUTY_VALUE;
-  }
-  beginSpeedTransition(fanTargetDutyValue);
-}
-
-// Fan has reached min speed.
-void fanOff(FanMode mode) {
-  if (mode == MODE_INTERVAL) {
-     intervalPauseDuration = mapToIntervalPauseDuration(getFanIntensity());
-  }
-  setFanDutyCycle(FAN_OUT_FAN_OFF);
-  endSpeedTransition();
-  configInput(FAN_PWM_OUT_PIN);
-}
-
-void speedUp(time32_s_t now) {
-  #ifdef VERBOSE
-    Serial.print("Speeding up: ");
-    Serial.print((speedTransistionEndTime - now));
-    Serial.println(" ms remaining");
-    Serial.flush();
-  #endif
-  if (now >= speedTransistionEndTime) {
-    handleStateTransition(TARGET_SPEED_REACHED);
-    
-  } else if (BLINK_LED_DURING_SPEED_TRANSITION) {
-    invertStatusLED();
+    logicalIO()->fanSpeed(SPEED_FULL);
   }
 }
 
-
-void slowDown(time32_s_t now) {
-  #ifdef VERBOSE
-    Serial.print("Slowing down: ");
-    Serial.print((speedTransistionEndTime - now));
-    Serial.println(" ms remaining");
-    Serial.flush();
-  #endif
-  if (now >= speedTransistionEndTime) {
-    handleStateTransition(TARGET_SPEED_REACHED);
-    
-  } else if (BLINK_LED_DURING_SPEED_TRANSITION) {
-    invertStatusLED();
-  }
+void fanOff() {
+  animateTransition();
+  logicalIO()->fanSpeed(SPEED_OFF);
 }
-
-
 
 void handleStateTransition(Event event) {
   if (event == EVENT_NONE) {
     return;
   }
-  time32_s_t now = wdtTime_s();
   #ifdef VERBOSE
     FanState beforeState = fanState;
   #endif
@@ -209,143 +180,53 @@ void handleStateTransition(Event event) {
     case FAN_OFF:
       switch(event) {
         case MODE_CHANGED: 
-          {
-            FanMode newMode = getFanMode();
-            if (newMode != MODE_OFF) {
-              fanState = FAN_SPEEDING_UP;
-              fanOn(newMode);
-              intervalPhaseBeginTime = now;
-            }
+          if (logicalIO()->fanMode() == MODE_CONTINUOUS) {
+            fanState = FAN_ON;
+            fanOn(MODE_CONTINUOUS);
+          } else if (logicalIO()->fanMode() == MODE_INTERVAL) {
+            fanState = FAN_PAUSING;
+            updateIntervalModeTaskPause();
+            FAN_SCHEDULER.scheduleTaskNow(& INTERVAL_MODE_TASK);
           }
           break;
           
-        case INTENSITY_CHANGED:
-          // noop: new value has been recorded in getFanIntensity(), will take effect on next mode change
-          break;
-          
-        default: 
-          break;
+        case INTENSITY_CHANGED: break;
+          // noop: new value has been recorded in getFanIntensity(), will take effect on next mode change (we are in OFF at this time)
+        default: break;
       }
       break;
       
-    case FAN_SPEEDING_UP: 
+    case FAN_ON: 
       switch(event) {
         case MODE_CHANGED: 
-          {
-            FanMode newMode = getFanMode();
-            if (newMode == MODE_OFF) {
-              fanState = FAN_SLOWING_DOWN;
-              beginSpeedTransition(FAN_OUT_FAN_OFF);
-            }
+          if (logicalIO()->fanMode() == MODE_CONTINUOUS) {
+            FAN_SCHEDULER.cancelTask(& INTERVAL_MODE_TASK);
+          } else if (logicalIO()->fanMode() == MODE_INTERVAL) {
+            fanState = FAN_PAUSING;
+            updateIntervalModeTaskPause();
+            FAN_SCHEDULER.scheduleTaskNow(& INTERVAL_MODE_TASK);
+          } else { // newMode == MODE_OFF
+            FAN_SCHEDULER.cancelTask(& INTERVAL_MODE_TASK);
+            fanState = FAN_OFF;
+            fanOff();
           }
           break;
           
         case INTENSITY_CHANGED: 
-          if (getFanMode() == MODE_CONTINUOUS) {
-            pwm_duty_t newTargetDutyValue = mapToFanDutyValue(getFanIntensity());
-            if (newTargetDutyValue > getFanDutyCycle()) {
-              /* continue: fanState = FAN_SPEEDING_UP */
-              beginSpeedTransition(newTargetDutyValue);
-            } else if (newTargetDutyValue < getFanDutyCycle()) {
-              fanState = FAN_SLOWING_DOWN;
-              beginSpeedTransition(newTargetDutyValue);
-            } else { /* newTargetDutyValue == getFanDutyCycle() */
-              fanState = FAN_STEADY;
-              endSpeedTransition();
-            }
-          }
-          break;
-          
-        case TARGET_SPEED_REACHED: 
-          fanState = FAN_STEADY;
-          intervalPhaseBeginTime = now;
-          endSpeedTransition();
-          break;
-
-        default:
-          break;
-      }
-      break;
-      
-    case FAN_STEADY: 
-      switch(event) {
-        case MODE_CHANGED: 
-          {
-            FanMode newMode = getFanMode();
-            if (newMode == MODE_OFF) {
-              fanState = FAN_SLOWING_DOWN;
-              beginSpeedTransition(FAN_OUT_FAN_OFF);
-            }
-          }
-          break;
-          
-        case INTENSITY_CHANGED: 
-          if (getFanMode() == MODE_CONTINUOUS) {
-            pwm_duty_t newTargetDutyValue = mapToFanDutyValue(getFanIntensity());
-            if (newTargetDutyValue > getFanDutyCycle()) {
-              fanState = FAN_SPEEDING_UP;
-              beginSpeedTransition(newTargetDutyValue);
-            } else if (newTargetDutyValue < getFanDutyCycle()) {
-              fanState = FAN_SLOWING_DOWN;
-              beginSpeedTransition(FAN_OUT_FAN_OFF);
-            } 
+          if (logicalIO()->fanMode() == MODE_CONTINUOUS) {
+            animateTransition();
+            logicalIO()->fanSpeed(mapToFanSpeed(logicalIO()->fanIntensity()));
+          } else if (logicalIO()->fanMode() == MODE_INTERVAL) {
+            /// ANIMATE ???????????? => extra BLINKER
+            updateIntervalModeTaskPause();
           }
           break;
 
         case INTERVAL_PHASE_ENDED:
-          fanState = FAN_SLOWING_DOWN;
-          beginSpeedTransition(FAN_OUT_FAN_OFF);
-          intervalPhaseBeginTime = now;
+          fanState = FAN_PAUSING;
+          fanOff();
           break;
           
-        default:
-          break;
-      }
-      break;
-      
-    case FAN_SLOWING_DOWN: 
-      switch(event) {
-        case MODE_CHANGED:
-          {
-            FanMode newMode = getFanMode();
-            if (newMode == MODE_OFF) {
-              beginSpeedTransition(FAN_OUT_FAN_OFF);
-            }
-          }
-          break;
-          
-        case INTENSITY_CHANGED: 
-          if (getFanMode() == MODE_CONTINUOUS) {
-            pwm_duty_t newTargetDutyValue = mapToFanDutyValue(getFanIntensity());
-            if (newTargetDutyValue > getFanDutyCycle()) {
-              fanState = FAN_SPEEDING_UP;
-              beginSpeedTransition(newTargetDutyValue);
-            } else if (newTargetDutyValue < getFanDutyCycle()) {
-              /* continue: fanState = FAN_SLOWING_DOWN */
-              beginSpeedTransition(newTargetDutyValue);
-            } else {  /* newTargetDutyValue == getFanDutyCycle() */
-              fanState = FAN_STEADY;
-              endSpeedTransition();
-            }
-          }
-          break;
-          
-        case TARGET_SPEED_REACHED: 
-          if (getFanMode() == MODE_OFF) {
-            fanState = FAN_OFF;
-            fanOff(MODE_INTERVAL);
-          } else if (getFanMode() == MODE_CONTINUOUS) {
-            fanState = FAN_STEADY;
-            endSpeedTransition();
-          } else {  // getFanMode() == MODE_INTERVAL
-            fanState = FAN_PAUSING;
-            fanOff(MODE_INTERVAL);
-            intervalPhaseBeginTime = now;
-            resetPauseBlip();
-          }
-          setStatusLED(LOW);
-          break;
-
         default:
           break;
       }
@@ -354,31 +235,32 @@ void handleStateTransition(Event event) {
     case FAN_PAUSING:
       switch(event) {
         case MODE_CHANGED:
-          {
-            FanMode newMode = getFanMode();
-            if (newMode == MODE_OFF) {
-              fanState = FAN_OFF;
-              fanOff(MODE_INTERVAL);
-            } else if (newMode == MODE_CONTINUOUS) {
-              fanState = FAN_SPEEDING_UP;
-              fanOn(MODE_CONTINUOUS);
-            }
+          if (logicalIO()->fanMode() == MODE_OFF) {
+            FAN_SCHEDULER.cancelTask(& INTERVAL_MODE_TASK);
+            fanState = FAN_OFF;
+          } else if (logicalIO()->fanMode() == MODE_CONTINUOUS) {
+            FAN_SCHEDULER.cancelTask(& INTERVAL_MODE_TASK);
+            fanState = FAN_ON;
+            fanOn(MODE_CONTINUOUS);
           }
           break;
           
         case INTENSITY_CHANGED: 
-          intervalPauseDuration = mapToIntervalPauseDuration(getFanIntensity());
-          if ((duration32_s_t) (now - intervalPhaseBeginTime) >= intervalPauseDuration) {  // pause is over
-            fanState = FAN_SPEEDING_UP;
-            fanOn(MODE_INTERVAL);
-            intervalPhaseBeginTime = now;
+          {
+            SDuration originalDelay = INTERVAL_MODE_TASK.originalDelay();
+            SDuration waited = originalDelay - (INTERVAL_MODE_TASK.dueTime() - now());
+            updateIntervalModeTaskPause();
+            if (waited > INTERVAL_MODE_TASK.offDuration()) { // pause is over
+              FAN_SCHEDULER.rescheduleTask(& INTERVAL_MODE_TASK, 0); // = now
+            } else {
+              FAN_SCHEDULER.rescheduleTask(& INTERVAL_MODE_TASK, INTERVAL_MODE_TASK.offDuration() - waited);
+            }
           }
           break;
 
         case INTERVAL_PHASE_ENDED:
-          fanState = FAN_SPEEDING_UP;
+          fanState = FAN_ON;
           fanOn(MODE_INTERVAL);
-          intervalPhaseBeginTime = now;
           break;
           
         default: 
@@ -396,3 +278,20 @@ void handleStateTransition(Event event) {
     Serial.println(fanStateName(fanState));
   #endif
 }
+
+void initFanControl() {
+  // Install input-change handlers (= assign function pointers)
+  logicalIO()->modeChangedHandler = scheduleModeChangeTask;
+  logicalIO()->intensityChangedHandler = scheduleIntensityChangedTask; 
+
+  SPEED_TRANSITION_BLINKER.delays(D_500MS, D_500MS);
+  PAUSE_BLINKER.delays(D_250MS, 30*D_1S);  // will be stopped at pause end
+  updateIntervalModeTaskPause();
+
+  logicalIO()->init();  // this causes the first tasks to be created for intensity and mode change
+
+  if (logicalIO()->fanMode() != MODE_OFF) {
+    handleStateTransition(MODE_CHANGED);
+  }
+}
+

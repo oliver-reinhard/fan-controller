@@ -17,9 +17,6 @@ void configInputPins() {
 
 void configOutputPins() {
   configOutput(STATUS_LED_OUT_PIN);
-  #if defined(__AVR_ATmega328P__)
-    configOutput(SLEEP_LED_OUT_PIN);
-  #endif
 }
 
 void configPinChangeInterrupts() {
@@ -151,10 +148,10 @@ void configLowPower() {
 void configPhysicalIO() {
   configInputPins();
   configOutputPins();
-  
-  //  configInt0Interrupt(); // triggered by PD2 (mode switch)
+
   configPinChangeInterrupts();
   sei();
+  
   configPWM();
 
   configLowPower();

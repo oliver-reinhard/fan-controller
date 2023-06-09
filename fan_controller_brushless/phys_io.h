@@ -20,16 +20,13 @@
     const pin_t INTENSITY_SWITCH_IN_PIN_2 = 7;    // PD7 - digital: PD6==HIGH && PD7==LOW   --> HIGH INTENSITY
                                                   //                PD6==HIGH && PD7==HIGH  --> MEDIUM INTENSITY
     const pin_t FAN_PWM_OUT_PIN = 10;             // PB2 - OC1B PWM signal !! DO NOT CHANGE PIN !! (PWM configuration is specific to Timer 1)
-    const pin_t STATUS_LED_OUT_PIN = 5;           // PD5 - digital out; is on when fan is of, blinks during transitioning 
-    const pin_t SLEEP_LED_OUT_PIN = 4;            // PD4 - digital out; on while MCU is in sleep mode 
+    const pin_t STATUS_LED_OUT_PIN = 5;           // PD5 - digital out; is on when fan is off, blinks during transitioning 
   
   #elif defined(__AVR_ATtiny85__)
     const pin_t MODE_SWITCH_IN_PIN = PB2;         // digital: LOW --> CONTINOUS, HIGH --> INTERVAL (HIGH --> port configured as pull-up)
     const pin_t INTENSITY_SWITCH_IN_PIN_1 = PB4;  // digital: PB4==LOW  && PB3==HIGH  --> LOW INTENSITY
     const pin_t INTENSITY_SWITCH_IN_PIN_2 = PB3;  // digital: PB4==HIGH && PB3==LOW   --> HIGH INTENSITY
                                                   //          PD4==HIGH && PD3==HIGH  --> MEDIUM INTENSITY
-    
-    const pin_t FAN_POWER_ON_OUT_PIN = PB5;       // Fan power: MOSFET on/off (some fans don't stop at PWM duty cycle = 0%)
     const pin_t FAN_PWM_OUT_PIN = PB1;            // PWM signal @ 25 kHz
     const pin_t STATUS_LED_OUT_PIN = PB0;         // digital out; blinks shortly in long intervals when fan is in interval mode
   #endif 

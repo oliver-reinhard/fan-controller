@@ -22,10 +22,10 @@ void configOutputPins() {
 void configPinChangeInterrupts() {
   // Pin-change interrupts are triggered for each level-change; this cannot be configured
   #if defined(__AVR_ATmega328P__)
-    PCICR |= _BV(PCIE0);                       // Enable pin-change interrupt 0 
+    PCICR |= _BV(PCIE0);                       // Enable pin-change interrupt 0 => MODE
     PCMSK0 |= _BV(PCINT0) | _BV(PCINT1);       // Configure pins PB0, PB1
     
-    PCICR |= _BV(PCIE2);                       // Enable pin-change interrupt 2  
+    PCICR |= _BV(PCIE2);                       // Enable pin-change interrupt 2 => INTENSITY
     PCMSK2 |= _BV(PCINT22) | _BV(PCINT23);     // Configure pins PD6, PD7
 
   #elif defined(__AVR_ATtiny85__)
@@ -151,7 +151,7 @@ void configPhysicalIO() {
 
   configPinChangeInterrupts();
   sei();
-  
+
   configPWM();
 
   configLowPower();

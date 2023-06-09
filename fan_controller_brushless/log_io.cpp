@@ -10,7 +10,6 @@ LogicalIOModel* logicalIO() {
 }
 
 void LogicalIOModel::init() {
-  configPhysicalIO();
   updateFanModeFromInputPins();
   updateFanIntensityFromInputPins();
 }
@@ -39,7 +38,8 @@ void LogicalIOModel::updateFanModeFromInputPins() {
       Serial.print("Read Fan Mode: ");
       Serial.println(mode == MODE_INTERVAL ? "INTERVAL" : (mode == MODE_CONTINUOUS ? "CONTINUOUS" :"OFF"));
     #endif
-    modeChangedHandler();
+
+    if (modeChangedHandler != NULL) modeChangedHandler();
   }
 }
 
@@ -61,16 +61,32 @@ void LogicalIOModel::updateFanIntensityFromInputPins() {
       Serial.print("Read Fan Intensity: ");
       Serial.println(intensity == INTENSITY_LOW ? "LOW" : (intensity == INTENSITY_HIGH ? "HIGH" :"MEDIUM"));
     #endif
-    intensityChangedHandler();
+  
+    if (intensityChangedHandler != NULL) intensityChangedHandler();
   }
 }
 
-// Interrupt service routine for Pin Change Interrupt Request 0
-ISR (PCINT0_vect) {  
-  debounceSwitch();
-  LOGICAL_IO.updateFanModeFromInputPins();
-  LOGICAL_IO.updateFanIntensityFromInputPins();
-}
+#if defined(__AVR_ATmega328P__)
+  // Interrupt service routine for Pin Change Interrupt Request 0 => MODE
+  ISR (PCINT0_vect) {  
+    debounceSwitch();
+    LOGICAL_IO.updateFanModeFromInputPins();
+  }
+
+  // Interrupt service routine for Pin Change Interrupt Request 2 => INTENSITY
+  ISR (PCINT2_vect) {  
+    debounceSwitch();
+    LOGICAL_IO.updateFanIntensityFromInputPins();
+  }
+
+#elif defined(__AVR_ATtiny85__)
+  // Interrupt service routine for Pin Change Interrupt Request 0 => MODE & INTENSITY
+  ISR (PCINT0_vect) {  
+    debounceSwitch();
+    LOGICAL_IO.updateFanModeFromInputPins();
+    LOGICAL_IO.updateFanIntensityFromInputPins();
+  }
+#endif
 
 pwm_duty_t mapToDutyValue(FanSpeed speed) {
   switch (speed) {

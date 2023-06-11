@@ -3,10 +3,6 @@
 
   #include <Arduino.h> 
   #include "phys_io.h"
-  
-  #if defined(__AVR_ATmega328P__)
-    #define VERBOSE
-  #endif
 
   const time16_ms_t INTERVAL_PAUSE_BLIP_OFF_DURATION_S = 5;      // [s] LED blips during pause: HIGH state
   const time16_ms_t INTERVAL_PAUSE_BLIP_ON_DURATION_MS = 200;    // [ms] LED LOW state
@@ -25,6 +21,9 @@
       bool isPwmActive();
       
       void statusLED(bool on);
+      #if defined(__AVR_ATmega328P__)
+        void wdtWakeupLEDBlip(); // uses delay() ==> needs Timer0
+      #endif
 
       // invoked only be interrupt service routine (ISR)
       void updateFanModeFromInputPins();

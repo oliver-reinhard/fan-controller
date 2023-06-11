@@ -6,7 +6,7 @@
   #include <limits.h>
   
   #if defined(__AVR_ATmega328P__)
-    #define VERBOSE
+    // #define VERBOSE
   #endif
   
   //
@@ -21,6 +21,7 @@
                                                   //                PD6==HIGH && PD7==HIGH  --> MEDIUM INTENSITY
     const pin_t FAN_PWM_OUT_PIN = 10;             // PB2 - OC1B PWM signal !! DO NOT CHANGE PIN !! (PWM configuration is specific to Timer 1)
     const pin_t STATUS_LED_OUT_PIN = 5;           // PD5 - digital out; is on when fan is off, blinks during transitioning 
+    const pin_t WDT_WAKEUP_OUT_PIN = 12;          // PB4 - digital out; blinks briefly after watchdog-timer wakeup 
   
   #elif defined(__AVR_ATtiny85__)
     const pin_t MODE_SWITCH_IN_PIN = PB2;         // digital: LOW --> CONTINOUS, HIGH --> INTERVAL (HIGH --> port configured as pull-up)

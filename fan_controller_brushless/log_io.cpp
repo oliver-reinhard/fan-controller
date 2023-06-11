@@ -1,3 +1,4 @@
+#include "Arduino.h"
 #include <limits.h>
 #include "log_io.h"
 #include "phys_io.h"
@@ -10,8 +11,8 @@ LogicalIOModel* logicalIO() {
 }
 
 void LogicalIOModel::init() {
-  updateFanModeFromInputPins();
   updateFanIntensityFromInputPins();
+  updateFanModeFromInputPins();
 }
 
 void LogicalIOModel::updateFanModeFromInputPins() {
@@ -67,6 +68,12 @@ void LogicalIOModel::updateFanIntensityFromInputPins() {
 }
 
 #if defined(__AVR_ATmega328P__)
+  void LogicalIOModel::wdtWakeupLEDBlip() {
+    digitalWrite(WDT_WAKEUP_OUT_PIN, HIGH);
+    delay(50);  // do not use Scheduler because this is part of the wakeup routine
+    digitalWrite(WDT_WAKEUP_OUT_PIN, LOW);
+  }
+
   // Interrupt service routine for Pin Change Interrupt Request 0 => MODE
   ISR (PCINT0_vect) {  
     debounceSwitch();

@@ -3,10 +3,16 @@
   
   #include <io_util.h>
   
-  const duration16_s_t INTERVAL_FAN_ON_DURATION = 300;         // [s]
-  const duration16_s_t INTERVAL_PAUSE_SHORT_DURATION = 60;     // [s]
-  const duration16_s_t INTERVAL_PAUSE_MEDIUM_DURATION = 600;   // [s]
-  const duration16_s_t INTERVAL_PAUSE_LONG_DURATION = 3600;    // [s]
+  // const duration16_s_t INTERVAL_FAN_ON_DURATION = 300;         // [s]
+  // const duration16_s_t INTERVAL_PAUSE_SHORT_DURATION = 60;     // [s]
+  // const duration16_s_t INTERVAL_PAUSE_MEDIUM_DURATION = 600;   // [s]
+  // const duration16_s_t INTERVAL_PAUSE_LONG_DURATION = 3600;    // [s]
+  // const duration16_s_t INTERVAL_PAUSE_BLIP_PERIOD = 10;    // [s]
+  const duration16_s_t INTERVAL_FAN_ON_DURATION = 30;         // [s]
+  const duration16_s_t INTERVAL_PAUSE_SHORT_DURATION = 15;     // [s]
+  const duration16_s_t INTERVAL_PAUSE_MEDIUM_DURATION = 30;   // [s]
+  const duration16_s_t INTERVAL_PAUSE_LONG_DURATION = 60;    // [s]
+  const duration16_s_t INTERVAL_PAUSE_BLIP_PERIOD = 10;    // [s]
   void controllerLoop();
   
   //

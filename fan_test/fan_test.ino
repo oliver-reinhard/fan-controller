@@ -1,89 +1,52 @@
 //#define F_CPU 1000000UL                  // ATmega 328: Defaults to 16 MHz
-//#define F_CPU 128000UL                  // Defaults to 16 MHz
 
-#include "io_util.h"
-//
+#include <io_util.h>
   
 #if defined(__AVR_ATmega328P__)
   #define VERBOSE
+  #include <debug.h>
 #endif
 
 #if defined(__AVR_ATmega328P__)
-  const pin_t FAN_PWM_OUT_PIN = 9;              // PIN 9 — OC1A PWM signal !! DO NOT CHANGE PIN !! (PWM configuration is specific to Timer 1)
-  const pin_t STATUS_LED_OUT_PIN = 8;           // PD0 - digital out; is on when fan is of, blinks during transitioning 
+  const pin_t FAN_PWM_OUT_PIN = 9;              // PIN 9 — OC1A PWM signal @ 25 kHz!! DO NOT CHANGE PIN !! (PWM configuration is specific to Timer 1)
+  const pin_t STATUS_LED_OUT_PIN = 8; 
 
 #elif defined(__AVR_ATtiny85__)
-  const pin_t FAN_POWER_ON_OUT_PIN = PB5;       // Fan power: MOSFET on/off (some fans don't stop at PWM duty cycle = 0%)
-  const pin_t FAN_PWM_OUT_PIN = PB1;            // PWM signal @ 25 kHz
+  const pin_t FAN_PWM_OUT_PIN = PB1;            // OC1A PWM signal @ 25 kHz => MUST BE PB1!!!
+  const pin_t STATUS_LED_OUT_PIN = PB0;
 #endif 
 
-//
-// PWM / Timer1 scaling to 25 KHz
-//
-#if defined(__AVR_ATmega328P__)
-  const uint8_t TIMER1_PRESCALER = 1;      // divide by 1
-  const uint16_t TIMER1_COUNT_TO = 320;    // count to this value (Timer 1 is 16 bit)
-
-  const pwm_duty_t PWM_DUTY_MAX = 255;
-
-#elif defined(__AVR_ATtiny85__)
-  #if (F_CPU == 1000000UL)
-    // PWM frequency = 1 MHz / 1 / 40 = 25 kHz 
-    const uint8_t TIMER1_PRESCALER = 1;     // divide by 1
-    const uint8_t TIMER1_COUNT_TO = 160;    // count to this value
-  #elif #if (F_CPU == 128000UL)
-    // PWM frequency = 128 kHz / 1 / 5 = 25.6 kHz 
-    const uint8_t TIMER1_PRESCALER = 1;     // divide by 1
-    const uint8_t TIMER1_COUNT_TO = 5;      // count to this value
-  #else
-    #error("F_CPU is undefined or its value is unknown")
-  #endif
-  
-  const uint8_t PWM_DUTY_MAX = TIMER1_COUNT_TO;
-#endif
-
-//
-// SETUP
-//
 void setup() {
-  configOutput(STATUS_LED_OUT_PIN);
-  configPWM1();
-
-  delay(1000);
-  turnOnLED(STATUS_LED_OUT_PIN, 2000);
-  delay(2000);
-
   #ifdef VERBOSE
     // Setup Serial Monitor
     Serial.begin(38400);
-    
-    Serial.print("F_CPU: ");
-    Serial.println(F_CPU);
+    DEBUG("F_CPU: ", F_CPU);
   #endif
+
+  configOutput(STATUS_LED_OUT_PIN);
+  configPWM1();
+
+  turnOnLED(STATUS_LED_OUT_PIN, 2000);
+  delay(2000);
 
   // test_steady_increments();
   test_specific_duty_values();
 
   turnOnLED(STATUS_LED_OUT_PIN, 2000);
   #ifdef VERBOSE
-    Serial.print("Done");
-    // Serial.print(" -> ");
-    // Serial.print(PCT_INCR);
-    // Serial.println("%");
-    // setFanDutyCycle(PWM_DUTY_INCR);
+    DEBUG("Done");
     Serial.println();
   #endif
 }
 
-void loop() {
-}
+void loop() { }
 
 // -------------
 
 void testCycle(uint8_t blinkTimes, pwm_duty_t value) {
     flashLED(STATUS_LED_OUT_PIN, blinkTimes);
     #ifdef VERBOSE
-      Serial.println(value);
+      DEBUG("Duty value", value);
     #endif
     setFanDutyCycle(value);
     delay(10000);
@@ -92,30 +55,48 @@ void testCycle(uint8_t blinkTimes, pwm_duty_t value) {
 }
 
 void test_steady_increments() {
-  const uint8_t PCT_START = 5;
-  const uint8_t PCT_END = 10;
-  const uint8_t PCT_INCR = 1;
+  const uint8_t PCT_START = 4;
+  const uint8_t PCT_END = 20;
+  const uint8_t PCT_INCR = 2;
   const uint8_t STEPS = (PCT_END - PCT_START) / PCT_INCR + 1;
-  const pwm_duty_t PWM_DUTY_START = (pwm_duty_t) (((uint16_t)PWM_DUTY_MAX) * PCT_START / 100);
-  const pwm_duty_t PWM_DUTY_INCR = (pwm_duty_t) (((uint16_t)PWM_DUTY_MAX) * PCT_INCR / 100);
 
   for(uint8_t i=1; i<=STEPS; i++) {
-    uint8_t pct_value = PCT_START + (i-1) * PCT_INCR;
-    pwm_duty_t duty_value = PWM_DUTY_START + (i-1) * PWM_DUTY_INCR;
+    pwm_duty_t duty_value = (pwm_duty_t) (((uint16_t)PWM_DUTY_MAX) * (PCT_START + (i-1)*PCT_INCR) / 100);
     #ifdef VERBOSE
+      uint8_t pct_value = PCT_START + (i-1) * PCT_INCR;
       Serial.print(pct_value);
       Serial.print("% -> ");
-      Serial.println(duty_value);
     #endif
     testCycle(i, duty_value);
   }
 }
 
 void test_specific_duty_values() {
-  testCycle(1, 20);
-  testCycle(2, 40);
-  testCycle(3, PWM_DUTY_MAX);
+  #if defined(__AVR_ATmega328P__)
+    testCycle(1, 17); // => ORC1A = 21
+    testCycle(2, 25); // => ORC1A = 31
+    testCycle(3, PWM_DUTY_MAX);// => ORC1A = 320 (= MAX)
+  #elif defined(__AVR_ATtiny85__)
+    testCycle(1, 20); // => ORC1A = 3
+    testCycle(2, 26); // => ORC1A = 4
+    testCycle(3, PWM_DUTY_MAX); // => ORC1A = 40 (= MAX)
+  #endif
 }
+
+//
+// PWM / Timer1 scaling to 25 KHz
+//
+#if defined(__AVR_ATmega328P__)
+  const uint16_t TIMER1_COUNT_TO = 320;    // count to this value (Timer 1 is 16 bit)
+
+#elif defined(__AVR_ATtiny85__)
+  #if (F_CPU == 1000000UL)
+    // PWM frequency = 1 MHz / 1 / 40 = 25 kHz 
+    const uint8_t TIMER1_COUNT_TO = 40;     // count to this value
+  #else
+    #error("F_CPU is undefined or its value is unknown")
+  #endif
+#endif
 
 void configPWM1() {
   #if defined(__AVR_ATmega328P__)
@@ -161,13 +142,13 @@ void configPWM1() {
     // | ICNC1 |  ICES1 |  -  | WGM13 | WGM12 | CS12 | CS11 | CS10 | 
     // |   0   |    0   |  0  |   1   |   0   |  0   |  0   |   1  |
     TCCR1B = _BV(WGM13)  
-          | _BV(CS10);
+          | _BV(CS10); // prescaling_B
 
     TCNT1 = 0;  // Reset timer
     ICR1 = TIMER1_COUNT_TO; // TOP (= count to this value)
             
     // Set the PWM pins as output.
-    configOutput(9); // OC1A
+    configOutput(FAN_PWM_OUT_PIN); // = PIN 9 => OC1A
     // configOutput(10);  // OC1B
   
   #elif defined(__AVR_ATtiny85__)
@@ -189,24 +170,33 @@ void configPWM1() {
     // Enable PWM A based on OCR1A
     TCCR1 |= _BV(PWM1A);
     
-    // On Compare Match with OCR1A (counter == OCR1A): Clear the output line (-> LOW), set on $00
+    // On Compare Match with OCR1A (counter == OCR1A): Clear the output line (-> LOW), set HIGH on $00
     TCCR1 |= _BV(COM1A1);
   
     // Configure PWM frequency:
-    TCCR1 |= TIMER1_PRESCALER;  // Prescale factor
-    OCR1C = TIMER1_COUNT_TO;    // Count 0,1,2..compare-match,0,1,2..compare-match, etc
+    TCCR1 |= _BV(CS10);       // Prescale factor = 1
+    OCR1C = TIMER1_COUNT_TO;  // Count 0,1,2..compare-match,0,1,2..compare-match, etc
   
     // Determines Duty Cycle: OCR1A / OCR1C e.g. value of 50 / 200 --> 25%,  value of 50 --> 0%
     OCR1A = 0;
+    configOutput(FAN_PWM_OUT_PIN);  // PB1 => OC1A
   #endif
 }
 
 
 void setFanDutyCycle(pwm_duty_t value) {
   #if defined(__AVR_ATmega328P__)
-    analogWrite(FAN_PWM_OUT_PIN, value); // Send PWM signal
+    uint16_t scaled = (((uint32_t) value) * TIMER1_COUNT_TO /  PWM_DUTY_MAX);
+    #ifdef VERBOSE
+      DEBUG("  -> OCR1A", scaled);
+    #endif
+    OCR1A = scaled;
 
   #elif defined(__AVR_ATtiny85__)
-    OCR1A = value;
+    pwm_duty_t scaled = (((uint16_t) value) * TIMER1_COUNT_TO /  PWM_DUTY_MAX);
+    #ifdef VERBOSE
+      DEBUG("  -> OCR1A", scaled);
+    #endif
+    OCR1A = scaled;
   #endif
 }

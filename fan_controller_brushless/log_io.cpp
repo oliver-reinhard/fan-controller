@@ -38,6 +38,7 @@ void LogicalIOModel::updateFanModeFromInputPins() {
     #ifdef VERBOSE
       Serial.print("Read Fan Mode: ");
       Serial.println(mode == MODE_INTERVAL ? "INTERVAL" : (mode == MODE_CONTINUOUS ? "CONTINUOUS" :"OFF"));
+      Serial.flush();
     #endif
 
     if (modeChangedHandler != NULL) modeChangedHandler();
@@ -61,6 +62,7 @@ void LogicalIOModel::updateFanIntensityFromInputPins() {
     #ifdef VERBOSE
       Serial.print("Read Fan Intensity: ");
       Serial.println(intensity == INTENSITY_LOW ? "LOW" : (intensity == INTENSITY_HIGH ? "HIGH" :"MEDIUM"));
+      Serial.flush();
     #endif
   
     if (intensityChangedHandler != NULL) intensityChangedHandler();
@@ -97,7 +99,7 @@ void LogicalIOModel::updateFanIntensityFromInputPins() {
 
 pwm_duty_t mapToDutyValue(FanSpeed speed) {
   switch (speed) {
-    case SPEED_OFF:     return ANALOG_OUT_MIN;
+    case SPEED_OFF:     return PWM_DUTY_MIN;
     case SPEED_MIN:     return FAN_CONTINUOUS_LOW_DUTY_VALUE;
     case SPEED_MEDIUM:  return FAN_CONTINUOUS_MEDIUM_DUTY_VALUE;
     default:            return FAN_CONTINUOUS_HIGH_DUTY_VALUE; 
@@ -106,26 +108,13 @@ pwm_duty_t mapToDutyValue(FanSpeed speed) {
 
 void LogicalIOModel::fanSpeed(FanSpeed speed) {
   this->speed = speed;
-  fanDutyCycle(mapToDutyValue(speed));
-}
-
-void LogicalIOModel::fanDutyCycle(pwm_duty_t value) {
-  fanDutyCycleValue = value;
-  #if defined(__AVR_ATmega328P__)
-    analogWrite(FAN_PWM_OUT_PIN, value); // Send PWM signal
-
-  #elif defined(__AVR_ATtiny85__)
-    pwm_duty_t scaled = value;
-    if (ANALOG_OUT_MAX < UCHAR_MAX) {
-      scaled = (pwm_duty_t) (((uint16_t) value) * ANALOG_OUT_MAX /  UCHAR_MAX);
-    }
-    OCR1A = scaled;
-  #endif
+  fanDutyCycleValue = mapToDutyValue(speed);
+  pwmDutyCycle(fanDutyCycleValue);
 }
 
 bool LogicalIOModel::isPwmActive() {
-  return ! (fanDutyCycleValue == ANALOG_OUT_MIN   // fan off – no PWM required
-          || fanDutyCycleValue == ANALOG_OUT_MAX);       // fan on at maximum – no PWM required)
+  return ! (fanDutyCycleValue == PWM_DUTY_MIN     // fan off – no PWM required
+          || fanDutyCycleValue == PWM_DUTY_MAX);  // fan on at maximum – no PWM required)
 }
 
 void LogicalIOModel::statusLED(bool on) {

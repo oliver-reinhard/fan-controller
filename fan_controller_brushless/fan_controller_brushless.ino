@@ -18,8 +18,8 @@ void setup() {
     
     Serial.print("F_CPU: ");
     Serial.println(F_CPU);
-    Serial.print("Fan out max: ");
-    Serial.println(ANALOG_OUT_MAX);
+    Serial.print("PWM counter max: ");
+    Serial.println(TIMER1_COUNT_TO);
     Serial.print("Fan out low threshold: ");
     Serial.println(FAN_LOW_THRESHOLD_DUTY_VALUE);
     Serial.flush();

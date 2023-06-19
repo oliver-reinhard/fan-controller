@@ -32,31 +32,19 @@
     const pin_t STATUS_LED_OUT_PIN = PB0;         // digital out; blinks shortly in long intervals when fan is in interval mode
   #endif 
 
-//
-// ANALOG OUT (PWM / Timer1 scaling to 25 kHz)
-//
-#if defined(__AVR_ATmega328P__)
-  const uint8_t TIMER1_PRESCALER = 1;      // divide by 1
-  const uint16_t TIMER1_COUNT_TO = 320;    // count to this value (Timer 1 is 16 bit)
+  //
+  // ANALOG OUT (PWM / Timer1 scaling to 25 kHz)
+  //
+  #if defined(__AVR_ATmega328P__)
+    const uint16_t TIMER1_COUNT_TO = 320;    // count to this value (Timer 1 is 16 bit)
 
-  const pwm_duty_t ANALOG_OUT_MIN = 0;          // Arduino constant
-  const pwm_duty_t ANALOG_OUT_MAX = UCHAR_MAX;  // PWM control
-
-#elif defined(__AVR_ATtiny85__)
+  #elif defined(__AVR_ATtiny85__)
     #if (F_CPU == 1000000UL)
       // PWM frequency = 1 MHz / 1 / 40 = 25 kHz 
-      const uint8_t TIMER1_PRESCALER = 1;     // divide by 1
       const uint8_t TIMER1_COUNT_TO = 40;    // count to this value
-    #elif #if (F_CPU == 128000UL)
-      // PWM frequency = 128 kHz / 1 / 5 = 25.6 kHz 
-      const uint8_t TIMER1_PRESCALER = 1;     // divide by 1
-      const uint8_t TIMER1_COUNT_TO = 5;      // count to this value
     #else
       #error("F_CPU is undefined or its value is unexpected")
     #endif
-
-    const pwm_duty_t ANALOG_OUT_MIN = 0;                 // Arduino constant
-    const pwm_duty_t ANALOG_OUT_MAX = TIMER1_COUNT_TO;   // PWM control
   #endif
   
   // FAN SPEED CONTROL:
@@ -64,14 +52,15 @@
 
   // Continuous operation:
   const pwm_duty_t FAN_CONTINUOUS_LOW_DUTY_VALUE = FAN_LOW_THRESHOLD_DUTY_VALUE;   // do not set lower than FAN_LOW_THRESHOLD_DUTY_VALUE --> fan would not start
-  const pwm_duty_t FAN_CONTINUOUS_MEDIUM_DUTY_VALUE = 40;
-  const pwm_duty_t FAN_CONTINUOUS_HIGH_DUTY_VALUE = ANALOG_OUT_MAX;
+  const pwm_duty_t FAN_CONTINUOUS_MEDIUM_DUTY_VALUE = 26;
+  const pwm_duty_t FAN_CONTINUOUS_HIGH_DUTY_VALUE = PWM_DUTY_MAX;
   
   // Interval operation:
-  const pwm_duty_t INTERVAL_FAN_ON_DUTY_VALUE = ANALOG_OUT_MAX;
+  const pwm_duty_t INTERVAL_FAN_ON_DUTY_VALUE = PWM_DUTY_MAX;
   
   //
   // CONFIGURATION
   //
   void configPhysicalIO();
+  void pwmDutyCycle(pwm_duty_t value);
 #endif

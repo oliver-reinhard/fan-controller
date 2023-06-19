@@ -155,7 +155,7 @@ time16_s_t mapToIntervalPauseDuration(FanIntensity intensity) {
 #endif
 
 void animateSpeedTransition() {
-  FAN_SCHEDULER.scheduleTaskNow(& SPEED_TRANSITION_BLINKER);
+   FAN_SCHEDULER.scheduleTaskNow(& SPEED_TRANSITION_BLINKER);
 }
 
 void animateIntensityChange() {

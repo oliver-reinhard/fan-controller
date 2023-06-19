@@ -1,3 +1,5 @@
+#include "io_util.h"
+#include "Arduino.h"
 #include <avr/power.h>
 #include <avr/sleep.h>
 #include "phys_io.h"
@@ -16,6 +18,7 @@ void configInputPins() {
 }
 
 void configOutputPins() {
+  configOutput(FAN_PWM_OUT_PIN);
   configOutput(STATUS_LED_OUT_PIN);
   #if defined(__AVR_ATmega328P__)
     configOutput(WDT_WAKEUP_OUT_PIN);
@@ -36,8 +39,7 @@ void configPinChangeInterrupts() {
     PCMSK|= _BV(PCINT2) | _BV(PCINT3) | _BV(PCINT4);    // Configure PB0, PB3 and PB4 as pin-change interrupt source
   #endif
 }
-
-void configPWM() {
+void configPWM_Timer1() {
   #if defined(__AVR_ATmega328P__)
     // Arduino default PWM frequency = 490 Hz
 
@@ -67,6 +69,7 @@ void configPWM() {
     // - Set to 1 (no prescaling)
     //   | CS12 | CS11 | CS10 | 
     //   |  0   |  0   |   1  |
+    // (see TCCR1B)
   
     // Configure Timer/Counter1 Control Register A (TCCR1A) 
     // | COM1A1 | COM1A0 | COM1B1 | COM1B0 |  -  |  -  | WGM11 | WGM10 |
@@ -81,17 +84,15 @@ void configPWM() {
     // | ICNC1 |  ICES1 |  -  | WGM13 | WGM12 | CS12 | CS11 | CS10 | 
     // |   0   |    0   |  0  |   1   |   0   |  0   |  0   |   1  |
     TCCR1B = _BV(WGM13)  
-          | _BV(CS10);
+          | _BV(CS10); // prescale factor = 1
+
 
     TCNT1 = 0;  // Reset timer
     ICR1 = TIMER1_COUNT_TO; // TOP (= count to this value)
-
-    TIMSK1 = 0;
-    SPCR &= B01111111;
             
     // Set the PWM pin as output.
-    // configOutput(9); // OC1A -- we use this port for input
-    configOutput(10);  // OC1B 
+    // configOutput(9); // OC1A -- we do not use this port for PWM but for input instead
+    // configOutput(10);  // OC1B 
   
   #elif defined(__AVR_ATtiny85__)
     // Configure Timer/Counter1 Control Register 1 (TCR1) 
@@ -116,12 +117,38 @@ void configPWM() {
     TCCR1 |= _BV(COM1A1);
   
     // Configure PWM frequency:
-    TCCR1 |= TIMER1_PRESCALER;  // Prescale factor
+    TCCR1 |= _BV(CS10);         // prescale factor = 1
     OCR1C = TIMER1_COUNT_TO;    // Count 0,1,2..compare-match,0,1,2..compare-match, etc
   
     // Determines Duty Cycle: OCR1A / OCR1C e.g. value of 50 / 200 --> 25%,  value of 50 --> 0%
-    OCR1A = 0;
+    // OCR1A = 0;
   #endif
+}
+
+void pwmDutyCycle(pwm_duty_t value) {
+  if (value == PWM_DUTY_MIN) 	{
+		digitalWrite(FAN_PWM_OUT_PIN, LOW);   // digitalWrite turns PWM off
+	}	else if (value == PWM_DUTY_MAX) 	{
+		digitalWrite(FAN_PWM_OUT_PIN, HIGH);  // digitalWrite turns PWM off
+	} else {
+    configPWM_Timer1();
+
+    #if defined(__AVR_ATmega328P__)
+      // Timer1 is 16 bit
+      uint16_t scaled = (((uint32_t) value) * TIMER1_COUNT_TO /  PWM_DUTY_MAX);
+      #ifdef VERBOSE
+        Serial.print("  -> OCR1B: ");
+        Serial.println(scaled);
+        Serial.flush();
+      #endif
+      OCR1B = scaled;  // PWM on port 10
+
+    #elif defined(__AVR_ATtiny85__)
+      // Timer1 is 8 bit
+      uint8_t scaled = (((uint16_t) value) * TIMER1_COUNT_TO /  PWM_DUTY_MAX);
+      OCR1A = scaled;  // PWM on port PB1
+    #endif
+  }
 }
 
 void configLowPower() {
@@ -158,7 +185,7 @@ void configPhysicalIO() {
   configPinChangeInterrupts();
   sei();
 
-  configPWM();
+  pwmDutyCycle(PWM_DUTY_MIN); // turn PWM off
 
   configLowPower();
 }

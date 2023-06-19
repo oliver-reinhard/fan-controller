@@ -1,5 +1,4 @@
-#include "io_util.h"
-#include "Arduino.h"
+#include <Arduino.h>
 #include <avr/power.h>
 #include <avr/sleep.h>
 #include "phys_io.h"
@@ -26,6 +25,9 @@ void configOutputPins() {
 }
 
 void configPinChangeInterrupts() {
+  // 
+  // ***** ISR declared in log_io.cpp *****
+  //
   // Pin-change interrupts are triggered for each level-change; this cannot be configured
   #if defined(__AVR_ATmega328P__)
     PCICR |= _BV(PCIE0);                       // Enable pin-change interrupt 0 => MODE
@@ -39,6 +41,7 @@ void configPinChangeInterrupts() {
     PCMSK|= _BV(PCINT2) | _BV(PCINT3) | _BV(PCINT4);    // Configure PB0, PB3 and PB4 as pin-change interrupt source
   #endif
 }
+
 void configPWM_Timer1() {
   #if defined(__AVR_ATmega328P__)
     // Arduino default PWM frequency = 490 Hz

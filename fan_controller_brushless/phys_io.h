@@ -52,7 +52,7 @@
 
   // Continuous operation:
   const pwm_duty_t FAN_CONTINUOUS_LOW_DUTY_VALUE = FAN_LOW_THRESHOLD_DUTY_VALUE;   // do not set lower than FAN_LOW_THRESHOLD_DUTY_VALUE --> fan would not start
-  const pwm_duty_t FAN_CONTINUOUS_MEDIUM_DUTY_VALUE = 26;
+  const pwm_duty_t FAN_CONTINUOUS_MEDIUM_DUTY_VALUE = 35;
   const pwm_duty_t FAN_CONTINUOUS_HIGH_DUTY_VALUE = PWM_DUTY_MAX;
   
   // Interval operation:
